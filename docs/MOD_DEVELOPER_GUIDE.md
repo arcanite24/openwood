@@ -14,6 +14,7 @@ Welcome to the OpenWood modding framework for Littlewood! This guide will help y
   - [InventoryAPI](#inventoryapi)
   - [WorldAPI](#worldapi)
   - [GameAPI](#gameapi)
+  - [UIAPI](#uiapi)
 - [Event System](#event-system)
 - [Custom Items](#custom-items)
 - [Custom UI](#custom-ui)
@@ -431,6 +432,75 @@ string summary = GameAPI.GetGameStateSummary();
 GameAPI.LogVersionInfo();
 ```
 
+### UIAPI
+
+The UIAPI provides factory methods for creating native game-styled UI elements.
+
+#### Availability
+
+```csharp
+// Check if UI API is ready (after game start)
+if (UIAPI.IsReady)
+{
+    // Safe to create UI elements
+}
+```
+
+#### Factory Methods
+
+```csharp
+// Windows
+UIWindow window = UIAPI.CreateWindow("My Window", 400, 300);
+UIAPI.DestroyWindow(window);
+var allWindows = UIAPI.GetWindows();
+
+// Panels
+UIPanel panel = UIAPI.CreatePanel(parent, 200, 100);
+
+// Buttons
+UIButton button = UIAPI.CreateButton(parent, "Click Me", () => {
+    // Click handler
+});
+
+// Labels
+UILabel label = UIAPI.CreateLabel(parent, "Hello World");
+
+// Toggles/Checkboxes
+UIToggle toggle = UIAPI.CreateToggle(parent, "Enable", false, (value) => {
+    // Value changed handler
+});
+
+// Sliders
+UISlider slider = UIAPI.CreateSlider(parent, "Speed", 0.5f, 5f, 1f);
+
+// Input fields
+UIInputField input = UIAPI.CreateInputField(parent, "Enter text...", "");
+
+// Scroll views
+UIScrollView scroll = UIAPI.CreateScrollView(parent, 300, 200);
+
+// Item slots
+UIItemSlot slot = UIAPI.CreateItemSlot(parent, 50);
+
+// Layout helpers
+GameObject vLayout = UIAPI.CreateVerticalLayout(parent, spacing: 5);
+GameObject hLayout = UIAPI.CreateHorizontalLayout(parent, spacing: 10);
+```
+
+#### Utility Methods
+
+```csharp
+// Set keyboard/controller focus
+UIAPI.SetSelected(button.GameObject);
+
+// Get game sprites
+Sprite itemSprite = UIAPI.GetItemSprite(40);  // Wood
+Sprite portrait = UIAPI.GetNPCPortrait(1);    // Willow
+
+// Create solid color sprites
+Sprite solid = UIAPI.CreateSolidSprite(32, 32, Color.red);
+```
+
 ---
 
 ## Event System
@@ -585,7 +655,129 @@ var seeds = ItemRegistry.GetByCategory("Seed");
 
 ## Custom UI
 
-Create custom IMGUI windows using ModUI.
+OpenWood provides two approaches for creating UI:
+
+### Native UI API (Recommended)
+
+The `UIAPI` creates UI elements that match the game's native look and feel, using the game's own sprites and styling. This is the recommended approach for a polished mod experience.
+
+```csharp
+using OpenWood.Core.API;
+using OpenWood.Core.UI;
+
+private UIWindow _myWindow;
+
+void SetupUI()
+{
+    // Create a native-styled window
+    _myWindow = UIAPI.CreateWindow("My Mod", 400, 300);
+    
+    // Add a vertical layout to the content area
+    _myWindow.AddVerticalLayout();
+    
+    // Add UI elements
+    UIAPI.CreateLabel(_myWindow.ContentTransform, "Hello from My Mod!")
+        .AsHeader()
+        .Centered();
+    
+    UIAPI.CreateButton(_myWindow.ContentTransform, "Add Money", () => {
+        PlayerAPI.AddMoney(1000);
+    });
+    
+    UIAPI.CreateToggle(_myWindow.ContentTransform, "Enable Feature", false, (enabled) => {
+        Plugin.Log.LogInfo($"Feature: {enabled}");
+    });
+    
+    UIAPI.CreateSlider(_myWindow.ContentTransform, "Speed", 0.5f, 5f, 1f)
+        .OnValueChanged(speed => {
+            PlayerAPI.SetSpeedMultiplier(speed);
+        });
+    
+    // Hide initially
+    _myWindow.Hide();
+}
+
+void Update()
+{
+    if (Input.GetKeyDown(KeyCode.F2))
+    {
+        _myWindow?.Toggle();
+    }
+}
+
+void OnDestroy()
+{
+    UIAPI.DestroyWindow(_myWindow);
+}
+```
+
+### Native UI Elements Reference
+
+| Element | Factory Method | Description |
+|---------|---------------|-------------|
+| `UIWindow` | `UIAPI.CreateWindow(title, width, height)` | Draggable window with title bar |
+| `UIPanel` | `UIAPI.CreatePanel(parent, width, height)` | Panel container with game styling |
+| `UIButton` | `UIAPI.CreateButton(parent, text, onClick)` | Button with native styling |
+| `UILabel` | `UIAPI.CreateLabel(parent, text)` | Text label with game font |
+| `UIToggle` | `UIAPI.CreateToggle(parent, label, value, onChange)` | Checkbox toggle |
+| `UISlider` | `UIAPI.CreateSlider(parent, label, min, max, value)` | Value slider |
+| `UIInputField` | `UIAPI.CreateInputField(parent, placeholder)` | Text input |
+| `UIScrollView` | `UIAPI.CreateScrollView(parent, width, height)` | Scrollable container |
+| `UIItemSlot` | `UIAPI.CreateItemSlot(parent, size)` | Inventory slot with item display |
+
+### Layout Helpers
+
+```csharp
+// Vertical layout (stacks children top to bottom)
+var vertLayout = UIAPI.CreateVerticalLayout(parent, spacing: 5);
+
+// Horizontal layout (stacks children left to right)
+var horzLayout = UIAPI.CreateHorizontalLayout(parent, spacing: 10);
+
+// Scroll view with content layout
+var scrollView = UIAPI.CreateScrollView(parent, 300, 200)
+    .WithVerticalLayout(spacing: 5, padding: 10);
+```
+
+### Styling Examples
+
+```csharp
+// Label styles
+UIAPI.CreateLabel(parent, "Title").AsHeader().Centered();
+UIAPI.CreateLabel(parent, "Value: 100").AsValue().RightAligned();
+UIAPI.CreateLabel(parent, "Description").SetFontSize(12);
+
+// Button styles
+UIAPI.CreateButton(parent, "Click Me", onClick).AsSmall();
+UIAPI.CreateButton(parent, "Big Button", onClick).AsLarge();
+
+// Slider for integers
+UIAPI.CreateSlider(parent, "Level", 1, 10, 5).AsWholeNumbers();
+
+// Input validation
+UIAPI.CreateInputField(parent, "Enter number").AsInteger();
+```
+
+### Item Slot Grid Example
+
+```csharp
+var scrollView = UIAPI.CreateScrollView(_myWindow.ContentTransform, 380, 200)
+    .WithGridLayout(cellWidth: 50, cellHeight: 50, spacing: 5);
+
+// Add item slots
+for (int i = 0; i < 20; i++)
+{
+    var slot = UIAPI.CreateItemSlot(scrollView.ContentTransform)
+        .SetItem(40 + i, 10)  // Item ID, count
+        .OnClick((itemId, count) => {
+            Plugin.Log.LogInfo($"Clicked item {itemId} x{count}");
+        });
+}
+```
+
+### IMGUI Approach (Legacy)
+
+For quick prototyping, you can still use IMGUI. Create custom IMGUI windows using ModUI.
 
 ```csharp
 using OpenWood.Core.UI;

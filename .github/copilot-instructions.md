@@ -45,6 +45,7 @@ OpenWood is a BepInEx modding framework for [Littlewood](https://store.steampowe
 | `InventoryAPI` | Items | `AddItem()`, `AddStarterPack()` |
 | `WorldAPI` | Tools, recipes, discoveries | `UnlockAllTools()`, `DiscoverAllItems()` |
 | `GameAPI` | Game state, debug | `IsPaused`, `DumpGameState()` |
+| `UIAPI` | Native game-styled UI | `CreateWindow()`, `CreateButton()`, `CreateLabel()` |
 
 ### Key Game Classes (from decompiled code)
 - `GameScript` - God object with 64k+ lines, most game state as static fields (`GameScript.dew`, `GameScript.day`)

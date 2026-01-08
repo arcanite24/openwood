@@ -74,6 +74,7 @@ namespace OpenWood.Core
             WorldAPI.Initialize();
             InventoryAPI.Initialize();
             GameAPI.Initialize();
+            UIAPI.Initialize();
         }
 
         private void InitializeCheatMenu()
