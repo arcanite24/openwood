@@ -1,0 +1,34 @@
+# Build outputs
+bin/
+obj/
+*.pdb
+
+# IDE files
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Decompiled source (large, can be regenerated)
+decompiled/
+
+# Littlewood game files (user's own installation)
+Littlewood/
+
+# Reference DLLs (game assemblies - not redistributable)
+lib/
+
+# Temp files
+*.tmp
+*.bak
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Keep documentation
+!docs/
+
+# Keep source
+!src/
