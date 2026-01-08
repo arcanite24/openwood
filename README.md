@@ -165,8 +165,43 @@ openwood/
 ├── docs/
 │   ├── creating-mods.md
 │   └── game-reference/
+├── tools/                       # Development tools
+│   ├── decompile.ps1            # Decompile game DLLs
+│   ├── extract-assets.ps1       # Extract game assets
+│   └── setup-bepinex.ps1        # Setup BepInEx
 ├── lib/                         # Game DLLs (not included)
-└── decompiled/                  # Decompiled source (not included)
+├── decompiled/                  # Decompiled source (not included)
+└── extracted-assets/            # Extracted assets (not included)
+```
+
+---
+
+## Development Tools
+
+### Asset Extraction
+
+Extract game assets (textures, audio, prefabs, etc.) for reference:
+
+```powershell
+cd tools
+.\extract-assets.ps1
+```
+
+This downloads [AssetRipper](https://github.com/AssetRipper/AssetRipper) and launches it to extract:
+- **Textures**: Sprites, UI elements, tiles, character art
+- **Audio**: Music, sound effects
+- **Prefabs**: Game objects, NPCs, items
+- **Scenes**: Game levels and maps
+- **ScriptableObjects**: Game data (items, recipes, dialogues)
+- **Animations**: Character and object animations
+
+### Decompilation
+
+Decompile game code for reference:
+
+```powershell
+cd tools
+.\decompile.ps1
 ```
 
 ---

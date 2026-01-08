@@ -1,6 +1,7 @@
 using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
+using OpenWood.Core.API;
 using OpenWood.Core.Cheats;
 using System;
 using System.Reflection;
@@ -34,6 +35,7 @@ namespace OpenWood.Core
             InitializeEventSystem();
             InitializeAssetManager();
             InitializeItemRegistry();
+            InitializeAPIs();
             InitializeCheatMenu();
             
             Logger.LogInfo("OpenWood loaded successfully!");
@@ -63,6 +65,17 @@ namespace OpenWood.Core
             Items.ItemRegistry.Initialize();
         }
 
+        private void InitializeAPIs()
+        {
+            Logger.LogDebug("Initializing modding APIs...");
+            PlayerAPI.Initialize();
+            TimeAPI.Initialize();
+            NPCAPI.Initialize();
+            WorldAPI.Initialize();
+            InventoryAPI.Initialize();
+            GameAPI.Initialize();
+        }
+
         private void InitializeCheatMenu()
         {
             Logger.LogDebug("Initializing cheat menu...");
@@ -73,6 +86,9 @@ namespace OpenWood.Core
         {
             // Tick the event system
             Events.GameEvents.Tick();
+            
+            // Tick the Player API for continuous effects
+            PlayerAPI.Tick();
         }
 
         private void OnGUI()

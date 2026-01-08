@@ -1,12 +1,34 @@
 # OpenWood Mod Developer Guide
 
-Welcome to the OpenWood modding framework for Littlewood! This guide will help you create your first mod.
+Welcome to the OpenWood modding framework for Littlewood! This guide will help you create mods using the OpenWood API.
+
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Project Setup](#project-setup)
+- [OpenWood API Overview](#openwood-api-overview)
+- [API Reference](#api-reference)
+  - [PlayerAPI](#playerapi)
+  - [TimeAPI](#timeapi)
+  - [NPCAPI](#npcapi)
+  - [InventoryAPI](#inventoryapi)
+  - [WorldAPI](#worldapi)
+  - [GameAPI](#gameapi)
+- [Event System](#event-system)
+- [Custom Items](#custom-items)
+- [Custom UI](#custom-ui)
+- [Configuration](#configuration)
+- [Building and Testing](#building-and-testing)
+- [Example Mod](#example-mod)
+
+---
 
 ## Prerequisites
 
 - Visual Studio 2022 or VS Code with C# extension
-- .NET SDK 4.7.2 or compatible
-- BepInEx installed in your Littlewood game folder
+- .NET Framework 4.7.2 SDK
+- BepInEx 5.x installed in your Littlewood game folder
+- OpenWood.Core installed in `BepInEx/plugins/`
 
 ## Project Setup
 
@@ -19,6 +41,7 @@ Create a new .NET Framework 4.7.2 Class Library project.
 Add references to:
 - `BepInEx/core/BepInEx.dll`
 - `BepInEx/core/0Harmony.dll`
+- `BepInEx/plugins/OpenWood.Core.dll`
 - `Littlewood_Data/Managed/Assembly-CSharp.dll`
 - `Littlewood_Data/Managed/UnityEngine.dll`
 - `Littlewood_Data/Managed/UnityEngine.CoreModule.dll`
@@ -27,280 +50,662 @@ Add references to:
 
 ```csharp
 using BepInEx;
-using HarmonyLib;
+using OpenWood.Core;
+using OpenWood.Core.API;
+using OpenWood.Core.Events;
 
 namespace MyMod
 {
     [BepInPlugin("com.yourname.mymod", "My Mod", "1.0.0")]
-    [BepInDependency("com.openwood.core", BepInDependency.DependencyFlags.SoftDependency)]
-    public class Plugin : BaseUnityPlugin
+    [BepInDependency(OpenWood.Core.PluginInfo.PLUGIN_GUID)]
+    public class MyModPlugin : BaseUnityPlugin
     {
-        private Harmony harmony;
-
         void Awake()
         {
             Logger.LogInfo("My Mod loaded!");
             
-            harmony = new Harmony("com.yourname.mymod");
-            harmony.PatchAll();
+            // Subscribe to events
+            GameEvents.OnDayStart += OnDayStart;
         }
 
         void OnDestroy()
         {
-            harmony?.UnpatchSelf();
+            // Unsubscribe from events
+            GameEvents.OnDayStart -= OnDayStart;
         }
-    }
-}
-```
 
-## Basic Harmony Patches
-
-### Add Items to Player
-
-```csharp
-using HarmonyLib;
-
-[HarmonyPatch(typeof(GameScript), "Update")]
-class DebugItemsPatch
-{
-    static void Postfix(GameScript __instance)
-    {
-        // Press F5 to add items
-        if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.F5))
+        private void OnDayStart(int day)
         {
-            // Use reflection to call AddItem
-            var addItem = typeof(GameScript).GetMethod("AddItem", 
-                System.Reflection.BindingFlags.NonPublic | 
-                System.Reflection.BindingFlags.Instance);
+            Logger.LogInfo($"Day {day} started!");
             
-            addItem.Invoke(__instance, new object[] { 100 }); // Add item ID 100
+            // Use the API
+            PlayerAPI.AddMoney(100);
         }
     }
 }
 ```
 
-### Modify Money
+---
+
+## OpenWood API Overview
+
+OpenWood provides a clean API layer that abstracts away the game's internal implementation. Instead of using reflection and Harmony patches directly, you can use these APIs:
+
+| API | Description |
+|-----|-------------|
+| `PlayerAPI` | Money, experience, movement, hobbies |
+| `TimeAPI` | Day, season, year, weather |
+| `NPCAPI` | Friendships, romance |
+| `InventoryAPI` | Adding/removing items |
+| `WorldAPI` | Tools, recipes, discoveries |
+| `GameAPI` | Game state, menus, debugging |
+| `GameEvents` | Subscribe to game events |
+
+---
+
+## API Reference
+
+### PlayerAPI
+
+The PlayerAPI provides control over player-related game state.
+
+#### Properties
 
 ```csharp
-[HarmonyPatch(typeof(GameScript), "AddDewdrops")]
-class DoubleMoney
-{
-    static void Prefix(ref int a)
-    {
-        a *= 2; // Double all money earned
-    }
-}
-```
-
-### Hook NPC Dialogue
-
-```csharp
-[HarmonyPatch(typeof(GameScript), "TalkToSpecificTownsfolk")]
-class CustomDialogue
-{
-    static void Postfix(int townsfolkId)
-    {
-        // Log who we talked to
-        UnityEngine.Debug.Log($"Talked to townsfolk {townsfolkId}");
-    }
-}
-```
-
-## Accessing Game State
-
-### Read Static Fields
-
-```csharp
-// Current date
-int day = GameScript.day;
-int season = GameScript.season;
-int year = GameScript.year;
-
 // Currency
-int money = GameScript.dew;
-int exp = GameScript.dayEXP;
+int money = PlayerAPI.Money;          // Get current money
+PlayerAPI.Money = 5000;               // Set money directly
 
-// Player state
-bool inMenu = GameScript.menuOpen;
-bool isTalking = GameScript.talking;
-bool isBuilding = GameScript.building;
+// Experience/Fatigue
+int exp = PlayerAPI.DayExperience;    // Get day experience (0-100)
+Vector2 pos = PlayerAPI.Position;     // Get player position
+bool indoors = PlayerAPI.IsIndoors;   // Check if indoors
+bool sprinting = PlayerAPI.IsSprinting;
+int facing = PlayerAPI.FacingDirection;
+
+// Toggle cheats
+PlayerAPI.InfiniteMoney = true;       // Enable infinite money
+PlayerAPI.FreezeTime = true;          // Prevent fatigue
+PlayerAPI.SpeedHackEnabled = true;    // Enable speed hack
+PlayerAPI.SpeedMultiplier = 2.0f;     // Set speed (0.5-5.0)
+```
+
+#### Methods
+
+```csharp
+// Money
+PlayerAPI.AddMoney(1000);             // Add money
+PlayerAPI.SetMoney(5000);             // Set money
+
+// Experience
+PlayerAPI.AddDayExperience(10);       // Add fatigue
+PlayerAPI.ResetDayExperience();       // Reset to 0
+PlayerAPI.MaxDayExperience();         // Set to 100 (end day)
+
+// Movement
+PlayerAPI.Teleport(5.0f, 3.0f);       // Teleport to coordinates
+PlayerAPI.Teleport(position);         // Teleport to Vector2
+PlayerAPI.SetSpeedMultiplier(2.0f);   // Set movement speed
+
+// Hobbies
+int exp = PlayerAPI.GetHobbyExperience(0);  // 0=Woodcutting, 1=Mining, etc.
+PlayerAPI.SetHobbyExperience(0, 1000);
+PlayerAPI.MaxAllHobbies();            // Max all hobby levels
+```
+
+---
+
+### TimeAPI
+
+The TimeAPI provides control over the game's calendar and weather.
+
+#### Enums
+
+```csharp
+public enum Season
+{
+    Spring = 0,
+    Summer = 1,
+    Autumn = 2,
+    Winter = 3
+}
+```
+
+#### Properties
+
+```csharp
+int day = TimeAPI.Day;                // Current day (1-7)
+int week = TimeAPI.Week;              // Current week (0-3)
+int seasonIdx = TimeAPI.SeasonIndex;  // Season as int (0-3)
+TimeAPI.Season season = TimeAPI.CurrentSeason;  // Season enum
+int year = TimeAPI.Year;              // Current year
+int played = TimeAPI.DaysPlayed;      // Total days played
+bool raining = TimeAPI.IsRaining;     // Weather state
+string name = TimeAPI.SeasonName;     // "Spring", "Summer", etc.
+```
+
+#### Methods
+
+```csharp
+// Advance time
+TimeAPI.AdvanceDay();                 // Next day
+TimeAPI.AdvanceDays(5);               // Skip 5 days
+TimeAPI.AdvanceWeek();                // Skip 7 days
+TimeAPI.AdvanceSeason();              // Skip 28 days
+
+// Set date
+TimeAPI.SetDate(3, TimeAPI.Season.Summer, 2);  // Day 3, Summer, Year 2
+TimeAPI.SetDate(5, 1, 1);             // Day 5, Season 1, Year 1
+TimeAPI.CurrentSeason = TimeAPI.Season.Winter;
 
 // Weather
-bool isRaining = GameScript.raining;
+TimeAPI.ToggleRain();
+TimeAPI.IsRaining = true;
+
+// Formatting
+string date = TimeAPI.GetFormattedDate();  // "Day 3, Summer, Year 2"
+string short = TimeAPI.GetShortDate();     // "3/2/2"
+string name = TimeAPI.GetSeasonName(1);    // "Summer"
 ```
 
-### Access Private Fields
+---
+
+### NPCAPI
+
+The NPCAPI provides control over NPC relationships.
+
+#### Enums
 
 ```csharp
-using System.Reflection;
-
-// Get private inventory
-var inventoryField = typeof(GameScript)
-    .GetField("inventory", BindingFlags.NonPublic | BindingFlags.Instance);
-int[] inventory = inventoryField.GetValue(gameScriptInstance) as int[];
+public enum NPC
+{
+    Willow = 1,
+    Dalton = 2,
+    Dudley = 3,
+    Laura = 4,
+    Bubsy = 5,
+    Ash = 6,
+    Lilith = 7,
+    Zana = 8,
+    Eunice = 9,
+    Clyde = 10,
+    Wolfgang = 11,
+    Iris = 12,
+    August = 13,
+    Mia = 14,
+    Theo = 15
+}
 ```
 
-## Using OpenWood.Core API
-
-If OpenWood.Core is installed, you can use its utilities:
-
-### Event Subscriptions
+#### Constants
 
 ```csharp
-using OpenWood.Core.Events;
+NPCAPI.MaxFriendshipLevel  // 10
+NPCAPI.MaxRomanceLevel     // 10
+NPCAPI.TotalNPCCount       // 20
+```
 
-void Start()
-{
-    GameEvents.OnDayStart += OnNewDay;
-    GameEvents.OnItemPickup += OnItemPickup;
-}
+#### Methods
 
-void OnNewDay(int day, int season, int year)
-{
-    Logger.LogInfo($"New day: {day}/{season}/{year}");
-}
+```csharp
+// Friendship
+int hearts = NPCAPI.GetFriendship(NPCAPI.NPC.Willow);
+NPCAPI.SetFriendship(NPCAPI.NPC.Willow, 10);
+NPCAPI.AddFriendship(NPCAPI.NPC.Dalton, 2);
+NPCAPI.MaxAllFriendships();
+NPCAPI.ResetAllFriendships();
 
-void OnItemPickup(int itemId)
+// Romance
+int romance = NPCAPI.GetRomance(NPCAPI.NPC.Ash);
+NPCAPI.SetRomance(NPCAPI.NPC.Ash, 5);
+NPCAPI.MaxAllRomance();
+
+// Utilities
+string name = NPCAPI.GetName(NPCAPI.NPC.Lilith);  // "Lilith"
+bool valid = NPCAPI.IsValidNPC(5);
+string summary = NPCAPI.GetRelationshipSummary(NPCAPI.NPC.Zana);
+```
+
+---
+
+### InventoryAPI
+
+The InventoryAPI provides methods for managing the player's inventory.
+
+#### Item ID Constants
+
+```csharp
+// Wood (40-44)
+InventoryAPI.ItemID.Wood          // 40
+InventoryAPI.ItemID.Magicwood     // 41
+InventoryAPI.ItemID.Goldenwood    // 42
+InventoryAPI.ItemID.Almwood       // 43
+InventoryAPI.ItemID.Leifwood      // 44
+
+// Planks (60-64)
+InventoryAPI.ItemID.WoodenPlank   // 60
+InventoryAPI.ItemID.FancyPlank    // 61
+InventoryAPI.ItemID.PerfectPlank  // 62
+InventoryAPI.ItemID.DuskPlank     // 63
+InventoryAPI.ItemID.DawnPlank     // 64
+
+// Stone/Ore (80-84)
+InventoryAPI.ItemID.Stone         // 80
+InventoryAPI.ItemID.Magicite      // 81
+InventoryAPI.ItemID.Orichalcum    // 82
+InventoryAPI.ItemID.Wyvernite     // 83
+InventoryAPI.ItemID.Dragalium     // 84
+
+// Bricks (100-104)
+InventoryAPI.ItemID.PlainBrick    // 100
+InventoryAPI.ItemID.FancyBrick    // 101
+InventoryAPI.ItemID.PerfectBrick  // 102
+InventoryAPI.ItemID.MoonlightOrb  // 103
+InventoryAPI.ItemID.SunlightOrb   // 104
+
+// And more: Fruit (120+), Vegetables (140+), Fish (160+), Bugs (200+)
+```
+
+#### Methods
+
+```csharp
+// Add items
+InventoryAPI.AddItem(40);                    // Add 1 wood
+InventoryAPI.AddItem(40, 10);                // Add 10 wood
+InventoryAPI.AddItem(InventoryAPI.ItemID.Stone, 5);
+
+// Bulk add
+InventoryAPI.AddAllWoodTypes(10);   // 10 of each wood type
+InventoryAPI.AddAllStoneTypes(10);  // 10 of each stone type
+InventoryAPI.AddAllPlankTypes(10);  // 10 of each plank type
+InventoryAPI.AddAllBrickTypes(10);  // 10 of each brick type
+InventoryAPI.AddStarterPack();      // Basic materials + 5000 dew
+
+// Item info
+string category = InventoryAPI.GetItemCategory(40);  // "Wood"
+bool valid = InventoryAPI.IsValidItemId(40);
+bool modItem = InventoryAPI.IsModItem(10001);
+```
+
+---
+
+### WorldAPI
+
+The WorldAPI provides control over world features and unlocks.
+
+#### Enums
+
+```csharp
+public enum Tool
 {
-    Logger.LogInfo($"Picked up item {itemId}");
+    Axe = 0,
+    Pickaxe = 1,
+    FishingRod = 2,
+    BugNet = 3,
+    WateringCan = 4,
+    Hoe = 5
 }
 ```
 
-### Custom Items
+#### Properties
+
+```csharp
+bool indoors = WorldAPI.IsIndoors;
+Vector2 pos = WorldAPI.PlayerPosition;
+bool building = WorldAPI.IsInBuildMode;
+bool editing = WorldAPI.IsInEditMode;
+int facing = WorldAPI.FacingDirection;
+```
+
+#### Location Constants
+
+```csharp
+Vector2 town = WorldAPI.Locations.TownCenter;
+Vector2 farm = WorldAPI.Locations.FarmArea;
+Vector2 forest = WorldAPI.Locations.ForestEntrance;
+Vector2 beach = WorldAPI.Locations.Beach;
+```
+
+#### Methods
+
+```csharp
+// Tools
+WorldAPI.UnlockTool(WorldAPI.Tool.FishingRod);
+WorldAPI.UnlockAllTools();
+bool unlocked = WorldAPI.IsToolUnlocked(WorldAPI.Tool.Axe);
+
+// Discovery
+WorldAPI.DiscoverItem(40);         // Discover wood
+WorldAPI.DiscoverAllItems();       // Discover all items
+bool found = WorldAPI.IsItemDiscovered(40);
+
+// Unlocks
+WorldAPI.UnlockAllRecipes();
+WorldAPI.UnlockMuseum();
+
+// Teleportation
+WorldAPI.TeleportTo(WorldAPI.Location.Town);
+```
+
+---
+
+### GameAPI
+
+The GameAPI provides access to general game state and debugging.
+
+#### Properties
+
+```csharp
+// Menu states
+bool menuOpen = GameAPI.IsMenuOpen;
+bool talking = GameAPI.IsTalking;
+bool interacting = GameAPI.IsInteracting;
+bool fishing = GameAPI.IsFishing;
+bool building = GameAPI.IsBuilding;
+bool paused = GameAPI.IsPaused;
+
+// Stats
+int days = GameAPI.DaysPlayed;
+int money = GameAPI.TotalMoney;
+
+// Version
+string version = GameAPI.OpenWoodVersion;
+string guid = GameAPI.OpenWoodGUID;
+```
+
+#### Methods
+
+```csharp
+// Menu control
+GameAPI.CloseAllMenus();
+GameAPI.Pause();
+GameAPI.Resume();
+GameAPI.TogglePause();
+
+// Input
+bool canInput = GameAPI.CanPlayerReceiveInput();
+
+// Debug
+GameAPI.DumpGameState();           // Log all state to console
+string summary = GameAPI.GetGameStateSummary();
+GameAPI.LogVersionInfo();
+```
+
+---
+
+## Event System
+
+Subscribe to game events to react to gameplay changes.
+
+### Available Events
+
+```csharp
+// Game lifecycle
+GameEvents.OnGameStart          // Action
+GameEvents.OnGameSave           // Action
+GameEvents.OnGameLoad           // Action
+
+// Time
+GameEvents.OnDayStart           // Action<int>  (day)
+GameEvents.OnDayEnd             // Action<int>  (day)
+GameEvents.OnSeasonChange       // Action<string>  (season name)
+
+// Player
+GameEvents.OnPlayerMove         // Action<float, float>  (x, y)
+GameEvents.OnPlayerInteract     // Action<string>  (target)
+GameEvents.OnPlayerMoneyChange  // Action<int>  (new amount)
+GameEvents.OnPlayerLevelUp      // Action<int>  (new level)
+
+// NPCs
+GameEvents.OnNPCSpawn           // Action<string>  (npc id)
+GameEvents.OnNPCDialogue        // Action<string, string>  (npc id, text)
+GameEvents.OnNPCFriendshipChange // Action<string, int>  (npc id, level)
+
+// Items
+GameEvents.OnItemPickup         // Action<string, int>  (item id, count)
+GameEvents.OnItemDrop           // Action<string, int>  (item id, count)
+GameEvents.OnItemCraft          // Action<string, int>  (item id, count)
+GameEvents.OnItemSell           // Action<string, int>  (item id, count)
+
+// Buildings
+GameEvents.OnBuildingPlace      // Action<string, int, int>  (id, x, y)
+GameEvents.OnBuildingRemove     // Action<string, int, int>  (id, x, y)
+GameEvents.OnBuildingUpgrade    // Action<string>  (building id)
+
+// World
+GameEvents.OnTileChange         // Action<int, int, string>  (x, y, type)
+GameEvents.OnWeatherChange      // Action<string>  (weather)
+```
+
+### Example Usage
+
+```csharp
+public class MyMod : BaseUnityPlugin
+{
+    void Awake()
+    {
+        GameEvents.OnDayStart += OnDayStart;
+        GameEvents.OnItemPickup += OnItemPickup;
+        GameEvents.OnNPCFriendshipChange += OnFriendshipChange;
+    }
+
+    void OnDestroy()
+    {
+        // Always unsubscribe!
+        GameEvents.OnDayStart -= OnDayStart;
+        GameEvents.OnItemPickup -= OnItemPickup;
+        GameEvents.OnNPCFriendshipChange -= OnFriendshipChange;
+    }
+
+    private void OnDayStart(int day)
+    {
+        Logger.LogInfo($"Good morning! It's day {day}");
+        PlayerAPI.AddMoney(100);  // Daily allowance
+    }
+
+    private void OnItemPickup(string itemId, int count)
+    {
+        Logger.LogDebug($"Picked up {count}x item {itemId}");
+    }
+
+    private void OnFriendshipChange(string npcId, int level)
+    {
+        if (level >= 10)
+        {
+            Logger.LogInfo($"Max friendship with NPC {npcId}!");
+        }
+    }
+}
+```
+
+### Update Callbacks
+
+Register per-frame callbacks:
+
+```csharp
+void Awake()
+{
+    GameEvents.RegisterUpdate(MyUpdateLoop);
+}
+
+void OnDestroy()
+{
+    GameEvents.UnregisterUpdate(MyUpdateLoop);
+}
+
+void MyUpdateLoop()
+{
+    // Called every frame
+}
+```
+
+---
+
+## Custom Items
+
+Register custom items using the ItemRegistry.
 
 ```csharp
 using OpenWood.Core.Items;
 
 void RegisterItems()
 {
-    ItemRegistry.RegisterItem(new CustomItem
+    var myItem = new ModItem
     {
-        Id = 1000,
-        Name = "Magic Potion",
-        Description = "A mysterious potion",
-        Value = 500
-    });
+        Id = "mymod_super_seed",
+        Name = "Super Seed",
+        Description = "A seed that grows any crop!",
+        Category = "Seed",
+        SellPrice = 1000,
+        MaxStack = 10,
+        CanGift = true,
+        CanSell = true,
+        
+        OnUse = (item) =>
+        {
+            Logger.LogInfo("Super Seed planted!");
+        },
+        
+        OnPickup = (item, count) =>
+        {
+            Logger.LogDebug($"Picked up {count} super seeds");
+        }
+    };
+
+    ItemRegistry.Register(myItem);
 }
+
+// Query items
+ModItem item = ItemRegistry.Get("mymod_super_seed");
+bool exists = ItemRegistry.Exists("mymod_super_seed");
+var seeds = ItemRegistry.GetByCategory("Seed");
 ```
 
-### Asset Loading
+---
 
-```csharp
-using OpenWood.Core.Assets;
+## Custom UI
 
-void LoadAssets()
-{
-    Texture2D myTexture = AssetManager.LoadTexture("mymod", "item.png");
-    Sprite mySprite = AssetManager.CreateSprite(myTexture);
-}
-```
-
-### Custom UI
+Create custom IMGUI windows using ModUI.
 
 ```csharp
 using OpenWood.Core.UI;
 
-void CreateUI()
+private ModWindow _myWindow;
+
+void SetupUI()
 {
-    ModUI.CreateWindow("My Window", 300, 200, (windowId) =>
-    {
-        GUI.Label(new Rect(10, 20, 280, 30), "Hello from my mod!");
-        
-        if (GUI.Button(new Rect(10, 60, 100, 30), "Click Me"))
-        {
-            // Button clicked
-        }
-    });
+    _myWindow = new ModWindow(
+        "mymod_debug",           // Unique ID
+        "My Mod Window",         // Title
+        new Rect(20, 20, 300, 200)  // Position & size
+    );
+
+    _myWindow.DrawContent = DrawMyWindow;
+    _myWindow.IsDraggable = true;
+    
+    ModUI.RegisterWindow(_myWindow);
 }
-```
 
-## Common Patterns
-
-### Toggle Feature with Hotkey
-
-```csharp
-class MyMod : BaseUnityPlugin
+void DrawMyWindow(int windowId)
 {
-    private bool featureEnabled = false;
+    GUILayout.Label($"Player Money: {PlayerAPI.Money}");
+    GUILayout.Label($"Day: {TimeAPI.Day}");
 
-    void Update()
+    if (GUILayout.Button("Add Money"))
     {
-        if (Input.GetKeyDown(KeyCode.F6))
-        {
-            featureEnabled = !featureEnabled;
-            Logger.LogInfo($"Feature: {featureEnabled}");
-        }
+        PlayerAPI.AddMoney(1000);
+    }
+
+    // Helper widgets
+    bool toggle = ModUI.Toggle("Enable Feature", _featureEnabled);
+    float slider = ModUI.Slider("Speed", _speed, 0.5f, 5f);
+    string text = ModUI.TextField("Name:", _name);
+}
+
+void Update()
+{
+    if (Input.GetKeyDown(KeyCode.F2))
+    {
+        _myWindow?.Toggle();
     }
 }
+
+void OnDestroy()
+{
+    ModUI.UnregisterWindow(_myWindow);
+}
 ```
 
-### Config File
+### Notifications
+
+```csharp
+ModUI.ShowNotification("Item collected!", 3f);  // 3 second duration
+```
+
+---
+
+## Configuration
+
+Use BepInEx configuration for mod settings.
 
 ```csharp
 using BepInEx.Configuration;
 
-class MyMod : BaseUnityPlugin
+public class MyMod : BaseUnityPlugin
 {
-    private ConfigEntry<bool> enableFeature;
-    private ConfigEntry<int> multiplier;
+    private ConfigEntry<bool> _enableFeature;
+    private ConfigEntry<int> _bonusAmount;
+    private ConfigEntry<KeyCode> _toggleKey;
 
     void Awake()
     {
-        enableFeature = Config.Bind("General", "EnableFeature", true, 
-            "Enable the main feature");
-        multiplier = Config.Bind("General", "Multiplier", 2, 
-            "Multiplier value");
+        _enableFeature = Config.Bind(
+            "General",           // Section
+            "EnableFeature",     // Key
+            true,                // Default
+            "Enable the main feature"  // Description
+        );
+
+        _bonusAmount = Config.Bind(
+            "Gameplay",
+            "BonusAmount",
+            100,
+            new ConfigDescription(
+                "Amount of bonus money per day",
+                new AcceptableValueRange<int>(0, 10000)
+            )
+        );
+
+        _toggleKey = Config.Bind(
+            "Controls",
+            "ToggleKey",
+            KeyCode.F5,
+            "Key to toggle the feature"
+        );
     }
-}
-```
 
-### Save Custom Data
-
-```csharp
-using System.IO;
-using UnityEngine;
-
-[Serializable]
-class MyModData
-{
-    public int customValue;
-    public List<string> items = new List<string>();
-}
-
-void SaveModData()
-{
-    string path = Path.Combine(Application.persistentDataPath, "mymod.json");
-    string json = JsonUtility.ToJson(modData);
-    File.WriteAllText(path, json);
-}
-
-void LoadModData()
-{
-    string path = Path.Combine(Application.persistentDataPath, "mymod.json");
-    if (File.Exists(path))
+    void Update()
     {
-        string json = File.ReadAllText(path);
-        modData = JsonUtility.FromJson<MyModData>(json);
+        if (Input.GetKeyDown(_toggleKey.Value))
+        {
+            _enableFeature.Value = !_enableFeature.Value;
+        }
     }
 }
 ```
 
-## Building and Installing
+Configuration is saved to `BepInEx/config/com.yourname.mymod.cfg`.
+
+---
+
+## Building and Testing
 
 ### Build
 
 1. Build your project in Release mode
 2. Copy the DLL to `Littlewood/BepInEx/plugins/`
 
-### Test
-
-1. Launch the game
-2. Check `BepInEx/LogOutput.log` for your mod's messages
-3. Enable console in `BepInEx/config/BepInEx.cfg` if needed
-
-## Debugging
-
-### Enable BepInEx Console
+### Enable Debug Console
 
 Edit `BepInEx/config/BepInEx.cfg`:
 ```ini
@@ -308,54 +713,92 @@ Edit `BepInEx/config/BepInEx.cfg`:
 Enabled = true
 ```
 
-### Log Messages
+### Logging
 
 ```csharp
 Logger.LogInfo("Info message");
 Logger.LogWarning("Warning message");
 Logger.LogError("Error message");
-Logger.LogDebug("Debug message");
+Logger.LogDebug("Debug message");  // Only shows with debug enabled
 ```
 
-### Unity Debug
+### Check Logs
+
+- Console: Shows in game window if enabled
+- File: `BepInEx/LogOutput.log`
+
+---
+
+## Example Mod
+
+See `src/OpenWood.ExampleMod/` for a complete example demonstrating:
+
+- Plugin setup with BepInEx dependency
+- Configuration with hotkeys and values
+- Event subscriptions (OnDayStart, OnItemPickup, etc.)
+- Custom item registration
+- IMGUI debug window
+- API usage for all subsystems
+
+### Quick Start Template
 
 ```csharp
-UnityEngine.Debug.Log("Message");
+using BepInEx;
+using OpenWood.Core;
+using OpenWood.Core.API;
+using OpenWood.Core.Events;
+
+namespace MyAwesomeMod
+{
+    [BepInPlugin("com.me.awesomemod", "Awesome Mod", "1.0.0")]
+    [BepInDependency(OpenWood.Core.PluginInfo.PLUGIN_GUID)]
+    public class AwesomeMod : BaseUnityPlugin
+    {
+        void Awake()
+        {
+            Logger.LogInfo("Awesome Mod loaded!");
+            
+            // Subscribe to events
+            GameEvents.OnDayStart += day => 
+            {
+                PlayerAPI.AddMoney(500);
+                Logger.LogInfo($"Day {day}: Here's 500 dew!");
+            };
+            
+            // Log current state
+            GameAPI.LogVersionInfo();
+        }
+    }
+}
 ```
 
-## Reference Documentation
+---
 
-- [Game Architecture](./game-reference/architecture.md)
-- [Items System](./game-reference/items.md)
-- [NPC System](./game-reference/npcs.md)
-- [Player System](./game-reference/player.md)
-- [Save System](./game-reference/save-system.md)
-- [Time & Calendar](./game-reference/time-calendar.md)
-- [Crafting System](./game-reference/crafting.md)
-- [Building System](./game-reference/building.md)
-- [Events & Hooks](./game-reference/events-hooks.md)
+## Tips & Best Practices
 
-## Example Mods
+1. **Use the APIs** - Don't use reflection unless necessary
+2. **Unsubscribe from events** - In OnDestroy() to prevent memory leaks
+3. **Handle null states** - Game state may not be ready early in lifecycle
+4. **Use configuration** - Let users customize your mod
+5. **Log appropriately** - Info for important events, Debug for details
+6. **Test save compatibility** - Ensure your mod doesn't corrupt saves
+7. **Document your mod** - Include a README with features and hotkeys
 
-See the `OpenWood.ExampleMod` project for a complete example including:
-- Custom item registration
-- Debug UI window (F2 key)
-- Event subscriptions
-- Harmony patches
+---
 
-## Tips
+## Reference Materials
 
-1. **Always use Harmony for patches** - Don't modify game files directly
-2. **Handle null references** - Game state may not be ready in early hooks
-3. **Test save compatibility** - Ensure your mod doesn't corrupt saves
-4. **Use soft dependencies** - Don't require other mods unless necessary
-5. **Log your actions** - Makes debugging easier
-6. **Clean up on destroy** - Unpatch Harmony and unsubscribe events
+- **Decompiled Code**: `decompiled/Assembly-CSharp/`
+- **Game Reference Docs**: `docs/game-reference/`
+- **Extracted Assets**: `extracted-assets/`
+- **Example Mod**: `src/OpenWood.ExampleMod/`
+
+---
 
 ## Getting Help
 
-- Check the decompiled source in `decompiled/Assembly-CSharp/`
-- Review `GameScript.cs` for most game logic
-- Use dnSpy for runtime debugging
+- Review the CheatMenu source as a reference implementation
+- Check `GameScript.cs` in the decompiled code for game logic
+- Use `GameAPI.DumpGameState()` to debug current state
 
-Happy modding!
+Happy modding! 🎮

@@ -12,6 +12,12 @@ obj/
 # Decompiled source (large, can be regenerated)
 decompiled/
 
+# Extracted assets (large, can be regenerated)
+extracted-assets/
+
+# AssetRipper tool (downloaded automatically)
+tools/.assetripper/
+
 # Littlewood game files (user's own installation)
 Littlewood/
 

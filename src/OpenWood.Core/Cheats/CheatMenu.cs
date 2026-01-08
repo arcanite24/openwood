@@ -1,17 +1,30 @@
 using System;
-using System.Collections.Generic;
-using System.Reflection;
+using OpenWood.Core.API;
 using UnityEngine;
 
 namespace OpenWood.Core.Cheats
 {
     /// <summary>
     /// Comprehensive cheat menu for Littlewood.
+    /// Provides an IMGUI interface for testing and debugging using the OpenWood API.
     /// Styled to match the game's UI as much as possible.
     /// </summary>
+    /// <remarks>
+    /// This is a reference implementation showing how to use the OpenWood modding APIs.
+    /// Mod developers can use this as an example for building their own UI.
+    /// </remarks>
     public class CheatMenu : MonoBehaviour
     {
+        #region Singleton
+
+        /// <summary>
+        /// The singleton instance of the CheatMenu.
+        /// </summary>
         public static CheatMenu Instance { get; private set; }
+
+        #endregion
+
+        #region Private Fields
 
         // Menu state
         private bool _isVisible = false;
@@ -33,7 +46,6 @@ namespace OpenWood.Core.Cheats
         private GUIStyle _labelStyle;
         private GUIStyle _valueStyle;
         private GUIStyle _textFieldStyle;
-        private GUIStyle _sliderStyle;
         private GUIStyle _toggleStyle;
         private bool _stylesInitialized = false;
 
@@ -50,30 +62,37 @@ namespace OpenWood.Core.Cheats
         private string _dayInput = "1";
         private string _seasonInput = "0";
         private string _yearInput = "1";
+        private string _teleportX = "0";
+        private string _teleportY = "0";
 
-        // Cheat state
-        private bool _godMode = false;
-        private bool _infiniteMoney = false;
+        // Toggle states (bound to API)
         private bool _noClip = false;
-        private bool _speedHack = false;
-        private bool _speedHackPrevious = false;
-        private float _speedMultiplier = 1f;
-        private bool _instantActions = false;
-        private bool _freezeTime = false;
 
         // Cursor state
         private bool _savedCursorVisible;
         private CursorLockMode _savedCursorLockMode;
 
-        // Cached references
-        private GameScript _gameScript;
-        private PlayerController _playerController;
-        private FieldInfo _inventoryField;
-        private MethodInfo _addItemMethod;
-        private MethodInfo _addDewdropsMethod;
+        #endregion
 
+        #region Public Properties
+
+        /// <summary>
+        /// Key to toggle the cheat menu visibility.
+        /// </summary>
         public static KeyCode ToggleKey { get; set; } = KeyCode.F3;
 
+        /// <summary>
+        /// Gets whether the menu is currently visible.
+        /// </summary>
+        public bool IsVisible => _isVisible;
+
+        #endregion
+
+        #region Initialization
+
+        /// <summary>
+        /// Initializes the CheatMenu. Called automatically by the plugin.
+        /// </summary>
         public static void Initialize()
         {
             if (Instance != null) return;
@@ -88,8 +107,8 @@ namespace OpenWood.Core.Cheats
         private void Awake()
         {
             // Center the window
-            float width = 500f;
-            float height = 450f;
+            float width = 520f;
+            float height = 480f;
             _windowRect = new Rect(
                 (Screen.width - width) / 2,
                 (Screen.height - height) / 2,
@@ -98,39 +117,72 @@ namespace OpenWood.Core.Cheats
             );
         }
 
+        #endregion
+
+        #region Unity Lifecycle
+
         private void Update()
         {
-            // Toggle menu
+            // Toggle menu with hotkey
             if (Input.GetKeyDown(ToggleKey))
             {
-                _isVisible = !_isVisible;
-                
-                if (_isVisible)
-                {
-                    // Save cursor state and show cursor
-                    _savedCursorVisible = Cursor.visible;
-                    _savedCursorLockMode = Cursor.lockState;
-                    Cursor.visible = true;
-                    Cursor.lockState = CursorLockMode.None;
-                    
-                    CacheReferences();
-                }
-                else
-                {
-                    // Restore cursor state
-                    Cursor.visible = _savedCursorVisible;
-                    Cursor.lockState = _savedCursorLockMode;
-                }
+                ToggleMenu();
             }
 
-            // Keyboard navigation when menu is open
+            // Handle keyboard navigation when visible
             if (_isVisible)
             {
                 HandleKeyboardNavigation();
             }
+        }
 
-            // Apply continuous cheats
-            ApplyContinuousCheats();
+        private void OnGUI()
+        {
+            if (!_isVisible) return;
+
+            InitStyles();
+            _windowRect = GUI.Window(_windowId, _windowRect, DrawWindow, "", _windowStyle);
+        }
+
+        #endregion
+
+        #region Menu Control
+
+        /// <summary>
+        /// Toggles the menu visibility.
+        /// </summary>
+        public void ToggleMenu()
+        {
+            _isVisible = !_isVisible;
+            
+            if (_isVisible)
+            {
+                _savedCursorVisible = Cursor.visible;
+                _savedCursorLockMode = Cursor.lockState;
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+            }
+            else
+            {
+                Cursor.visible = _savedCursorVisible;
+                Cursor.lockState = _savedCursorLockMode;
+            }
+        }
+
+        /// <summary>
+        /// Shows the menu.
+        /// </summary>
+        public void Show()
+        {
+            if (!_isVisible) ToggleMenu();
+        }
+
+        /// <summary>
+        /// Hides the menu.
+        /// </summary>
+        public void Hide()
+        {
+            if (_isVisible) ToggleMenu();
         }
 
         private void HandleKeyboardNavigation()
@@ -164,158 +216,28 @@ namespace OpenWood.Core.Cheats
             switch (_currentTab)
             {
                 case 0: // Player tab
-                    if (Input.GetKeyDown(KeyCode.Alpha1)) AddMoney(1000);
-                    if (Input.GetKeyDown(KeyCode.Alpha2)) AddMoney(10000);
-                    if (Input.GetKeyDown(KeyCode.Alpha3)) { GameScript.dayEXP = 0; RefreshDayEXPBar(); }
+                    if (Input.GetKeyDown(KeyCode.Alpha1)) PlayerAPI.AddMoney(1000);
+                    if (Input.GetKeyDown(KeyCode.Alpha2)) PlayerAPI.AddMoney(10000);
+                    if (Input.GetKeyDown(KeyCode.Alpha3)) PlayerAPI.ResetDayExperience();
                     break;
                 case 1: // Items tab
-                    if (Input.GetKeyDown(KeyCode.Alpha1)) { for (int i = 0; i < 10; i++) AddItem(40); } // Wood
-                    if (Input.GetKeyDown(KeyCode.Alpha2)) { for (int i = 0; i < 10; i++) AddItem(80); } // Stone
-                    if (Input.GetKeyDown(KeyCode.Alpha3)) { for (int i = 0; i < 10; i++) AddItem(60); } // Wooden Plank
+                    if (Input.GetKeyDown(KeyCode.Alpha1)) InventoryAPI.AddItem(InventoryAPI.ItemID.Wood, 10);
+                    if (Input.GetKeyDown(KeyCode.Alpha2)) InventoryAPI.AddItem(InventoryAPI.ItemID.Stone, 10);
+                    if (Input.GetKeyDown(KeyCode.Alpha3)) InventoryAPI.AddItem(InventoryAPI.ItemID.WoodenPlank, 10);
                     break;
                 case 2: // Time tab
-                    if (Input.GetKeyDown(KeyCode.Alpha1)) AdvanceDay();
-                    if (Input.GetKeyDown(KeyCode.Alpha2)) ToggleRain();
+                    if (Input.GetKeyDown(KeyCode.Alpha1)) TimeAPI.AdvanceDay();
+                    if (Input.GetKeyDown(KeyCode.Alpha2)) TimeAPI.ToggleRain();
                     break;
                 case 3: // NPCs tab
-                    if (Input.GetKeyDown(KeyCode.Alpha1)) { for (int i = 1; i <= 20; i++) SetNPCFriendship(i, 10); }
+                    if (Input.GetKeyDown(KeyCode.Alpha1)) NPCAPI.MaxAllFriendships();
                     break;
             }
         }
 
-        private void CacheReferences()
-        {
-            try
-            {
-                _gameScript = FindObjectOfType<GameScript>();
-                _playerController = FindObjectOfType<PlayerController>();
+        #endregion
 
-                if (_gameScript != null)
-                {
-                    var type = typeof(GameScript);
-                    _inventoryField = type.GetField("inventory", BindingFlags.NonPublic | BindingFlags.Instance);
-                    // Use specific parameter types to avoid ambiguous match
-                    _addItemMethod = type.GetMethod("AddItem", BindingFlags.NonPublic | BindingFlags.Instance, 
-                        null, new Type[] { typeof(int), typeof(int) }, null);
-                    _addDewdropsMethod = type.GetMethod("AddDewdrops", BindingFlags.NonPublic | BindingFlags.Instance,
-                        null, new Type[] { typeof(int) }, null);
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to cache references: {ex.Message}");
-            }
-        }
-
-        private void ApplyContinuousCheats()
-        {
-            if (_gameScript == null) return;
-
-            // Infinite money
-            if (_infiniteMoney && GameScript.dew < 99999)
-            {
-                GameScript.dew = 99999;
-                GameScript.actualDew = 99999;
-            }
-
-            // Speed hack - must modify INSTANCE fields since static speed gets overwritten every frame
-            if (_speedHack && _playerController != null)
-            {
-                ApplySpeedHack();
-            }
-            else if (!_speedHack && _speedHackPrevious && _playerController != null)
-            {
-                // Just turned off - reset to original speeds
-                ResetSpeeds();
-            }
-            _speedHackPrevious = _speedHack;
-
-            // Freeze time (prevent day EXP from reaching max)
-            if (_freezeTime && GameScript.dayEXP > 0)
-            {
-                GameScript.dayEXP = 0;
-                RefreshDayEXPBar();
-            }
-        }
-
-        private float _baseWalkSpeed = 1.6f;
-        private float _baseRunSpeed = 2f;
-        private float _baseEditSpeed = 1.6f;
-        private float _baseBoostSpeed = 2f;
-        private bool _originalSpeedsCached = false;
-
-        private void ApplySpeedHack()
-        {
-            try
-            {
-                var type = typeof(PlayerController);
-                
-                // Get the instance fields (not static speed)
-                var walkSpeedField = type.GetField("walkSpeed", BindingFlags.Public | BindingFlags.Instance);
-                var runSpeedField = type.GetField("runSpeed", BindingFlags.Public | BindingFlags.Instance);
-                var editSpeedField = type.GetField("editSpeed", BindingFlags.Public | BindingFlags.Instance);
-                var boostSpeedField = type.GetField("boostSpeed", BindingFlags.Public | BindingFlags.Instance);
-
-                if (walkSpeedField == null || runSpeedField == null) return;
-
-                // Cache original speeds on first use
-                if (!_originalSpeedsCached)
-                {
-                    _baseWalkSpeed = (float)walkSpeedField.GetValue(_playerController);
-                    _baseRunSpeed = (float)runSpeedField.GetValue(_playerController);
-                    if (editSpeedField != null) _baseEditSpeed = (float)editSpeedField.GetValue(_playerController);
-                    if (boostSpeedField != null) _baseBoostSpeed = (float)boostSpeedField.GetValue(_playerController);
-                    _originalSpeedsCached = true;
-                }
-
-                // Set modified speeds based on multiplier
-                walkSpeedField.SetValue(_playerController, _baseWalkSpeed * _speedMultiplier);
-                runSpeedField.SetValue(_playerController, _baseRunSpeed * _speedMultiplier);
-                if (editSpeedField != null) editSpeedField.SetValue(_playerController, _baseEditSpeed * _speedMultiplier);
-                if (boostSpeedField != null) boostSpeedField.SetValue(_playerController, _baseBoostSpeed * _speedMultiplier);
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Speed hack failed: {ex.Message}");
-            }
-        }
-
-        private void ResetSpeeds()
-        {
-            if (_playerController == null || !_originalSpeedsCached) return;
-            
-            try
-            {
-                var type = typeof(PlayerController);
-                type.GetField("walkSpeed", BindingFlags.Public | BindingFlags.Instance)?.SetValue(_playerController, _baseWalkSpeed);
-                type.GetField("runSpeed", BindingFlags.Public | BindingFlags.Instance)?.SetValue(_playerController, _baseRunSpeed);
-                type.GetField("editSpeed", BindingFlags.Public | BindingFlags.Instance)?.SetValue(_playerController, _baseEditSpeed);
-                type.GetField("boostSpeed", BindingFlags.Public | BindingFlags.Instance)?.SetValue(_playerController, _baseBoostSpeed);
-            }
-            catch { }
-        }
-
-        private void RefreshDayEXPBar()
-        {
-            if (_gameScript == null) return;
-            
-            try
-            {
-                var method = typeof(GameScript).GetMethod("RefreshDayEXPBar", BindingFlags.NonPublic | BindingFlags.Instance);
-                method?.Invoke(_gameScript, null);
-            }
-            catch { }
-        }
-
-        private void OnGUI()
-        {
-            if (!_isVisible) return;
-
-            InitStyles();
-
-            // Draw window
-            _windowRect = GUI.Window(_windowId, _windowRect, DrawWindow, "", _windowStyle);
-        }
+        #region Style Initialization
 
         private void InitStyles()
         {
@@ -336,7 +258,6 @@ namespace OpenWood.Core.Cheats
             var buttonActiveTex = MakeTexture(2, 2, buttonActiveColor);
             var sectionTex = MakeTexture(2, 2, new Color(0.2f, 0.17f, 0.25f, 0.8f));
 
-            // Window style
             _windowStyle = new GUIStyle(GUI.skin.window)
             {
                 normal = { background = bgTex, textColor = textColor },
@@ -344,7 +265,6 @@ namespace OpenWood.Core.Cheats
                 border = new RectOffset(4, 4, 4, 4)
             };
 
-            // Header style
             _headerStyle = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 18,
@@ -353,7 +273,6 @@ namespace OpenWood.Core.Cheats
                 normal = { textColor = headerColor }
             };
 
-            // Tab button styles
             _tabButtonStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = 12,
@@ -370,7 +289,6 @@ namespace OpenWood.Core.Cheats
                 normal = { background = buttonActiveTex, textColor = Color.white }
             };
 
-            // Section style
             _sectionStyle = new GUIStyle(GUI.skin.box)
             {
                 normal = { background = sectionTex, textColor = textColor },
@@ -378,7 +296,6 @@ namespace OpenWood.Core.Cheats
                 margin = new RectOffset(0, 0, 5, 5)
             };
 
-            // Button style
             _buttonStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = 13,
@@ -395,14 +312,12 @@ namespace OpenWood.Core.Cheats
                 padding = new RectOffset(6, 6, 4, 4)
             };
 
-            // Label style
             _labelStyle = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 13,
                 normal = { textColor = textColor }
             };
 
-            // Value style (for displaying values)
             _valueStyle = new GUIStyle(GUI.skin.label)
             {
                 fontSize = 13,
@@ -410,7 +325,6 @@ namespace OpenWood.Core.Cheats
                 normal = { textColor = headerColor }
             };
 
-            // Text field style
             _textFieldStyle = new GUIStyle(GUI.skin.textField)
             {
                 fontSize = 13,
@@ -418,10 +332,6 @@ namespace OpenWood.Core.Cheats
                 padding = new RectOffset(6, 6, 4, 4)
             };
 
-            // Slider style
-            _sliderStyle = new GUIStyle(GUI.skin.horizontalSlider);
-
-            // Toggle style
             _toggleStyle = new GUIStyle(GUI.skin.toggle)
             {
                 fontSize = 13,
@@ -444,6 +354,10 @@ namespace OpenWood.Core.Cheats
             return tex;
         }
 
+        #endregion
+
+        #region Main Window Drawing
+
         private void DrawWindow(int windowId)
         {
             // Title bar
@@ -453,13 +367,12 @@ namespace OpenWood.Core.Cheats
             GUILayout.FlexibleSpace();
             if (GUILayout.Button("X", _smallButtonStyle, GUILayout.Width(25)))
             {
-                _isVisible = false;
+                Hide();
             }
             GUILayout.EndHorizontal();
 
             // Keyboard hints
-            GUILayout.Label("Navigate: Q/E or [/] = Switch Tabs | ↑↓ = Scroll | 1-3 = Quick Actions", _labelStyle);
-
+            GUILayout.Label("Navigate: Q/E = Switch Tabs | Arrow Keys = Scroll | 1-3 = Quick Actions", _labelStyle);
             GUILayout.Space(5);
 
             // Tab bar
@@ -503,11 +416,13 @@ namespace OpenWood.Core.Cheats
         private void DrawStatusBar()
         {
             GUILayout.BeginHorizontal(_sectionStyle);
-            GUILayout.Label($"Day: {GameScript.day} | Season: {GameScript.season} | Year: {GameScript.year}", _labelStyle);
+            GUILayout.Label($"{TimeAPI.GetFormattedDate()}", _labelStyle);
             GUILayout.FlexibleSpace();
-            GUILayout.Label($"Dew: {GameScript.dew}", _valueStyle);
+            GUILayout.Label($"Dew: {PlayerAPI.Money}", _valueStyle);
             GUILayout.EndHorizontal();
         }
+
+        #endregion
 
         #region Player Tab
 
@@ -515,11 +430,11 @@ namespace OpenWood.Core.Cheats
         {
             // Money section
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("💰 Money", _headerStyle);
+            GUILayout.Label("Money", _headerStyle);
             
             GUILayout.BeginHorizontal();
             GUILayout.Label("Current:", _labelStyle, GUILayout.Width(80));
-            GUILayout.Label(GameScript.dew.ToString(), _valueStyle);
+            GUILayout.Label(PlayerAPI.Money.ToString(), _valueStyle);
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -527,28 +442,30 @@ namespace OpenWood.Core.Cheats
             if (GUILayout.Button("Add", _buttonStyle, GUILayout.Width(60)))
             {
                 if (int.TryParse(_moneyInput, out int amount))
-                    AddMoney(amount);
+                    PlayerAPI.AddMoney(amount);
             }
             if (GUILayout.Button("Set", _buttonStyle, GUILayout.Width(60)))
             {
                 if (int.TryParse(_moneyInput, out int amount))
-                    SetMoney(amount);
+                    PlayerAPI.SetMoney(amount);
             }
-            if (GUILayout.Button("+1000", _smallButtonStyle)) AddMoney(1000);
-            if (GUILayout.Button("+10000", _smallButtonStyle)) AddMoney(10000);
+            if (GUILayout.Button("+1000", _smallButtonStyle)) PlayerAPI.AddMoney(1000);
+            if (GUILayout.Button("+10000", _smallButtonStyle)) PlayerAPI.AddMoney(10000);
             GUILayout.EndHorizontal();
 
-            _infiniteMoney = GUILayout.Toggle(_infiniteMoney, "  Infinite Money", _toggleStyle);
+            bool infiniteMoney = PlayerAPI.InfiniteMoney;
+            bool newInfiniteMoney = GUILayout.Toggle(infiniteMoney, "  Infinite Money", _toggleStyle);
+            if (newInfiniteMoney != infiniteMoney) PlayerAPI.InfiniteMoney = newInfiniteMoney;
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             // Experience section
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("⭐ Experience", _headerStyle);
+            GUILayout.Label("Experience", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"Day EXP: {GameScript.dayEXP} / 100", _labelStyle);
+            GUILayout.Label($"Day EXP: {PlayerAPI.DayExperience} / 100", _labelStyle);
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
@@ -556,43 +473,47 @@ namespace OpenWood.Core.Cheats
             if (GUILayout.Button("Add EXP", _buttonStyle, GUILayout.Width(80)))
             {
                 if (int.TryParse(_expInput, out int amount))
-                    AddDayEXP(amount);
+                    PlayerAPI.AddDayExperience(amount);
             }
             if (GUILayout.Button("Max EXP", _buttonStyle, GUILayout.Width(80)))
             {
-                GameScript.dayEXP = 100;
-                RefreshDayEXPBar();
+                PlayerAPI.MaxDayExperience();
             }
             if (GUILayout.Button("Reset EXP", _buttonStyle, GUILayout.Width(80)))
             {
-                GameScript.dayEXP = 0;
-                RefreshDayEXPBar();
+                PlayerAPI.ResetDayExperience();
             }
             GUILayout.EndHorizontal();
 
-            _freezeTime = GUILayout.Toggle(_freezeTime, "  Freeze Day (No Fatigue)", _toggleStyle);
+            bool freezeTime = PlayerAPI.FreezeTime;
+            bool newFreezeTime = GUILayout.Toggle(freezeTime, "  Freeze Day (No Fatigue)", _toggleStyle);
+            if (newFreezeTime != freezeTime) PlayerAPI.FreezeTime = newFreezeTime;
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             // Movement section
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🏃 Movement", _headerStyle);
+            GUILayout.Label("Movement", _headerStyle);
 
-            _speedHack = GUILayout.Toggle(_speedHack, "  Speed Hack", _toggleStyle);
+            bool speedHack = PlayerAPI.SpeedHackEnabled;
+            bool newSpeedHack = GUILayout.Toggle(speedHack, "  Speed Hack", _toggleStyle);
+            if (newSpeedHack != speedHack) PlayerAPI.SpeedHackEnabled = newSpeedHack;
             
-            if (_speedHack)
+            if (PlayerAPI.SpeedHackEnabled)
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label($"Speed: {_speedMultiplier:F1}x", _labelStyle, GUILayout.Width(100));
-                _speedMultiplier = GUILayout.HorizontalSlider(_speedMultiplier, 0.5f, 5f);
+                GUILayout.Label($"Speed: {PlayerAPI.SpeedMultiplier:F1}x", _labelStyle, GUILayout.Width(100));
+                float newSpeed = GUILayout.HorizontalSlider(PlayerAPI.SpeedMultiplier, 0.5f, 5f);
+                if (Math.Abs(newSpeed - PlayerAPI.SpeedMultiplier) > 0.01f)
+                    PlayerAPI.SpeedMultiplier = newSpeed;
                 GUILayout.EndHorizontal();
 
                 GUILayout.BeginHorizontal();
-                if (GUILayout.Button("1x", _smallButtonStyle)) _speedMultiplier = 1f;
-                if (GUILayout.Button("1.5x", _smallButtonStyle)) _speedMultiplier = 1.5f;
-                if (GUILayout.Button("2x", _smallButtonStyle)) _speedMultiplier = 2f;
-                if (GUILayout.Button("3x", _smallButtonStyle)) _speedMultiplier = 3f;
+                if (GUILayout.Button("1x", _smallButtonStyle)) PlayerAPI.SetSpeedMultiplier(1f);
+                if (GUILayout.Button("1.5x", _smallButtonStyle)) PlayerAPI.SetSpeedMultiplier(1.5f);
+                if (GUILayout.Button("2x", _smallButtonStyle)) PlayerAPI.SetSpeedMultiplier(2f);
+                if (GUILayout.Button("3x", _smallButtonStyle)) PlayerAPI.SetSpeedMultiplier(3f);
                 GUILayout.EndHorizontal();
             }
 
@@ -608,7 +529,7 @@ namespace OpenWood.Core.Cheats
         {
             // Add items section
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("📦 Add Items", _headerStyle);
+            GUILayout.Label("Add Items", _headerStyle);
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("Item ID:", _labelStyle, GUILayout.Width(60));
@@ -619,8 +540,7 @@ namespace OpenWood.Core.Cheats
             {
                 if (int.TryParse(_itemIdInput, out int id) && int.TryParse(_itemCountInput, out int count))
                 {
-                    for (int i = 0; i < count; i++)
-                        AddItem(id);
+                    InventoryAPI.AddItem(id, count);
                 }
             }
             GUILayout.EndHorizontal();
@@ -628,178 +548,82 @@ namespace OpenWood.Core.Cheats
 
             GUILayout.Space(5);
 
-            // Quick add buttons - WOOD (40-44)
+            // Quick add buttons - WOOD & PLANKS
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🪵 Wood & Planks", _headerStyle);
+            GUILayout.Label("Wood & Planks", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Wood (40)", _smallButtonStyle)) AddItem(40);
-            if (GUILayout.Button("Magicwood (41)", _smallButtonStyle)) AddItem(41);
-            if (GUILayout.Button("Goldenwood (42)", _smallButtonStyle)) AddItem(42);
-            if (GUILayout.Button("Almwood (43)", _smallButtonStyle)) AddItem(43);
-            if (GUILayout.Button("Leifwood (44)", _smallButtonStyle)) AddItem(44);
+            if (GUILayout.Button("Wood", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Wood);
+            if (GUILayout.Button("Magicwood", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Magicwood);
+            if (GUILayout.Button("Goldenwood", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Goldenwood);
+            if (GUILayout.Button("Almwood", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Almwood);
+            if (GUILayout.Button("Leifwood", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Leifwood);
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Wooden Plank (60)", _smallButtonStyle)) AddItem(60);
-            if (GUILayout.Button("Fancy Plank (61)", _smallButtonStyle)) AddItem(61);
-            if (GUILayout.Button("Perfect Plank (62)", _smallButtonStyle)) AddItem(62);
-            if (GUILayout.Button("Dusk Plank (63)", _smallButtonStyle)) AddItem(63);
-            if (GUILayout.Button("Dawn Plank (64)", _smallButtonStyle)) AddItem(64);
+            if (GUILayout.Button("Wooden Plank", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.WoodenPlank);
+            if (GUILayout.Button("Fancy Plank", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.FancyPlank);
+            if (GUILayout.Button("Perfect Plank", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.PerfectPlank);
+            if (GUILayout.Button("Dusk Plank", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.DuskPlank);
+            if (GUILayout.Button("Dawn Plank", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.DawnPlank);
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
-            // STONE/ORE (80-84)
+            // STONE & BRICKS
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("�ite Stone & Bricks", _headerStyle);
+            GUILayout.Label("Stone & Bricks", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Stone (80)", _smallButtonStyle)) AddItem(80);
-            if (GUILayout.Button("Magicite (81)", _smallButtonStyle)) AddItem(81);
-            if (GUILayout.Button("Orichalcum (82)", _smallButtonStyle)) AddItem(82);
-            if (GUILayout.Button("Wyvernite (83)", _smallButtonStyle)) AddItem(83);
-            if (GUILayout.Button("Dragalium (84)", _smallButtonStyle)) AddItem(84);
+            if (GUILayout.Button("Stone", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Stone);
+            if (GUILayout.Button("Magicite", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Magicite);
+            if (GUILayout.Button("Orichalcum", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Orichalcum);
+            if (GUILayout.Button("Wyvernite", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Wyvernite);
+            if (GUILayout.Button("Dragalium", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.Dragalium);
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Plain Brick (100)", _smallButtonStyle)) AddItem(100);
-            if (GUILayout.Button("Fancy Brick (101)", _smallButtonStyle)) AddItem(101);
-            if (GUILayout.Button("Perfect Brick (102)", _smallButtonStyle)) AddItem(102);
-            if (GUILayout.Button("Moonlight Orb (103)", _smallButtonStyle)) AddItem(103);
-            if (GUILayout.Button("Sunlight Orb (104)", _smallButtonStyle)) AddItem(104);
+            if (GUILayout.Button("Plain Brick", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.PlainBrick);
+            if (GUILayout.Button("Fancy Brick", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.FancyBrick);
+            if (GUILayout.Button("Perfect Brick", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.PerfectBrick);
+            if (GUILayout.Button("Moonlight Orb", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.MoonlightOrb);
+            if (GUILayout.Button("Sunlight Orb", _smallButtonStyle)) InventoryAPI.AddItem(InventoryAPI.ItemID.SunlightOrb);
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
-            // FRUIT (120-132)
+            // BULK ACTIONS
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🍎 Fruit", _headerStyle);
+            GUILayout.Label("Bulk Actions", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Slimeapple (120)", _smallButtonStyle)) AddItem(120);
-            if (GUILayout.Button("Plumberry (121)", _smallButtonStyle)) AddItem(121);
-            if (GUILayout.Button("Peachot (122)", _smallButtonStyle)) AddItem(122);
-            if (GUILayout.Button("Goldenbell (123)", _smallButtonStyle)) AddItem(123);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Sourpuck (124)", _smallButtonStyle)) AddItem(124);
-            if (GUILayout.Button("Goop Melon (125)", _smallButtonStyle)) AddItem(125);
-            if (GUILayout.Button("Papayapa (126)", _smallButtonStyle)) AddItem(126);
-            if (GUILayout.Button("Crescent Moon (127)", _smallButtonStyle)) AddItem(127);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // VEGETABLES (140-152)
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🥕 Vegetables", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Carrot (140)", _smallButtonStyle)) AddItem(140);
-            if (GUILayout.Button("Cabbage (141)", _smallButtonStyle)) AddItem(141);
-            if (GUILayout.Button("Potato (142)", _smallButtonStyle)) AddItem(142);
-            if (GUILayout.Button("Corn (143)", _smallButtonStyle)) AddItem(143);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Motato (144)", _smallButtonStyle)) AddItem(144);
-            if (GUILayout.Button("Eggplant (145)", _smallButtonStyle)) AddItem(145);
-            if (GUILayout.Button("Onion (146)", _smallButtonStyle)) AddItem(146);
-            if (GUILayout.Button("Golden Carrot (149)", _smallButtonStyle)) AddItem(149);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // FISH (160-189)
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🐟 Fish", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Minnow (160)", _smallButtonStyle)) AddItem(160);
-            if (GUILayout.Button("Trout (161)", _smallButtonStyle)) AddItem(161);
-            if (GUILayout.Button("Fire Carp (162)", _smallButtonStyle)) AddItem(162);
-            if (GUILayout.Button("Golden Tuna (176)", _smallButtonStyle)) AddItem(176);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // BUGS (200-229)
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🦋 Bugs", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Flutterfly (200)", _smallButtonStyle)) AddItem(200);
-            if (GUILayout.Button("Monarch (202)", _smallButtonStyle)) AddItem(202);
-            if (GUILayout.Button("Ladybug (205)", _smallButtonStyle)) AddItem(205);
-            if (GUILayout.Button("Golden Titan (214)", _smallButtonStyle)) AddItem(214);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // MISC (240-263)
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("📦 Miscellaneous", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Egg (241)", _smallButtonStyle)) AddItem(241);
-            if (GUILayout.Button("Golden Egg (242)", _smallButtonStyle)) AddItem(242);
-            if (GUILayout.Button("Milk (243)", _smallButtonStyle)) AddItem(243);
-            if (GUILayout.Button("Golden Milk (244)", _smallButtonStyle)) AddItem(244);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Fleece (247)", _smallButtonStyle)) AddItem(247);
-            if (GUILayout.Button("Golden Fleece (248)", _smallButtonStyle)) AddItem(248);
-            if (GUILayout.Button("Dust (296)", _smallButtonStyle)) AddItem(296);
-            if (GUILayout.Button("Honeycomb (263)", _smallButtonStyle)) AddItem(263);
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // Tools & Special
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🔧 Bulk Actions", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Add 10 of Each Wood", _buttonStyle))
+            if (GUILayout.Button("Add All Wood Types (10)", _buttonStyle))
             {
-                for (int i = 0; i < 10; i++)
-                {
-                    AddItem(40); AddItem(41); AddItem(42); AddItem(43); AddItem(44);
-                }
+                InventoryAPI.AddAllWoodTypes(10);
             }
-            if (GUILayout.Button("Add 10 of Each Stone", _buttonStyle))
+            if (GUILayout.Button("Add All Stone Types (10)", _buttonStyle))
             {
-                for (int i = 0; i < 10; i++)
-                {
-                    AddItem(80); AddItem(81); AddItem(82); AddItem(83); AddItem(84);
-                }
+                InventoryAPI.AddAllStoneTypes(10);
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Add 10 of Each Plank", _buttonStyle))
+            if (GUILayout.Button("Add All Planks (10)", _buttonStyle))
             {
-                for (int i = 0; i < 10; i++)
-                {
-                    AddItem(60); AddItem(61); AddItem(62); AddItem(63); AddItem(64);
-                }
+                InventoryAPI.AddAllPlankTypes(10);
             }
-            if (GUILayout.Button("Add 10 of Each Brick", _buttonStyle))
+            if (GUILayout.Button("Add All Bricks (10)", _buttonStyle))
             {
-                for (int i = 0; i < 10; i++)
-                {
-                    AddItem(100); AddItem(101); AddItem(102); AddItem(103); AddItem(104);
-                }
+                InventoryAPI.AddAllBrickTypes(10);
+            }
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Add Starter Pack", _buttonStyle))
+            {
+                InventoryAPI.AddStarterPack();
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -813,23 +637,23 @@ namespace OpenWood.Core.Cheats
         {
             // Current time display
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("📅 Current Date", _headerStyle);
+            GUILayout.Label("Current Date", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"Day: {GameScript.day}", _valueStyle);
-            GUILayout.Label($"Week: {GameScript.week}", _valueStyle);
-            GUILayout.Label($"Season: {GetSeasonName(GameScript.season)}", _valueStyle);
-            GUILayout.Label($"Year: {GameScript.year}", _valueStyle);
+            GUILayout.Label($"Day: {TimeAPI.Day}", _valueStyle);
+            GUILayout.Label($"Week: {TimeAPI.Week}", _valueStyle);
+            GUILayout.Label($"Season: {TimeAPI.SeasonName}", _valueStyle);
+            GUILayout.Label($"Year: {TimeAPI.Year}", _valueStyle);
             GUILayout.EndHorizontal();
 
-            GUILayout.Label($"Days Played: {GameScript.daysPlayed}", _labelStyle);
+            GUILayout.Label($"Days Played: {TimeAPI.DaysPlayed}", _labelStyle);
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             // Set time section
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("⏰ Set Date", _headerStyle);
+            GUILayout.Label("Set Date", _headerStyle);
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("Day (1-7):", _labelStyle, GUILayout.Width(70));
@@ -843,12 +667,12 @@ namespace OpenWood.Core.Cheats
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Apply Date", _buttonStyle))
             {
-                if (int.TryParse(_dayInput, out int day))
-                    GameScript.day = Mathf.Clamp(day, 1, 7);
-                if (int.TryParse(_seasonInput, out int season))
-                    GameScript.season = Mathf.Clamp(season, 0, 3);
-                if (int.TryParse(_yearInput, out int year))
-                    GameScript.year = Mathf.Max(year, 1);
+                if (int.TryParse(_dayInput, out int day) &&
+                    int.TryParse(_seasonInput, out int season) &&
+                    int.TryParse(_yearInput, out int year))
+                {
+                    TimeAPI.SetDate(day, season, year);
+                }
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -857,19 +681,19 @@ namespace OpenWood.Core.Cheats
 
             // Quick time controls
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("⏭️ Quick Controls", _headerStyle);
+            GUILayout.Label("Quick Controls", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Next Day", _buttonStyle)) AdvanceDay();
-            if (GUILayout.Button("Next Week", _buttonStyle)) { for (int i = 0; i < 7; i++) AdvanceDay(); }
-            if (GUILayout.Button("Next Season", _buttonStyle)) { for (int i = 0; i < 28; i++) AdvanceDay(); }
+            if (GUILayout.Button("Next Day", _buttonStyle)) TimeAPI.AdvanceDay();
+            if (GUILayout.Button("Next Week", _buttonStyle)) TimeAPI.AdvanceWeek();
+            if (GUILayout.Button("Next Season", _buttonStyle)) TimeAPI.AdvanceSeason();
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("🌸 Spring", _buttonStyle)) GameScript.season = 0;
-            if (GUILayout.Button("☀️ Summer", _buttonStyle)) GameScript.season = 1;
-            if (GUILayout.Button("🍂 Autumn", _buttonStyle)) GameScript.season = 2;
-            if (GUILayout.Button("❄️ Winter", _buttonStyle)) GameScript.season = 3;
+            if (GUILayout.Button("Spring", _buttonStyle)) TimeAPI.CurrentSeason = TimeAPI.Season.Spring;
+            if (GUILayout.Button("Summer", _buttonStyle)) TimeAPI.CurrentSeason = TimeAPI.Season.Summer;
+            if (GUILayout.Button("Autumn", _buttonStyle)) TimeAPI.CurrentSeason = TimeAPI.Season.Autumn;
+            if (GUILayout.Button("Winter", _buttonStyle)) TimeAPI.CurrentSeason = TimeAPI.Season.Winter;
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
 
@@ -877,14 +701,14 @@ namespace OpenWood.Core.Cheats
 
             // Weather
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🌧️ Weather", _headerStyle);
+            GUILayout.Label("Weather", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"Raining: {(GameScript.raining ? "Yes" : "No")}", _valueStyle);
+            GUILayout.Label($"Raining: {(TimeAPI.IsRaining ? "Yes" : "No")}", _valueStyle);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(GameScript.raining ? "Stop Rain" : "Start Rain", _buttonStyle))
+            if (GUILayout.Button(TimeAPI.IsRaining ? "Stop Rain" : "Start Rain", _buttonStyle))
             {
-                ToggleRain();
+                TimeAPI.ToggleRain();
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -898,7 +722,7 @@ namespace OpenWood.Core.Cheats
         {
             // NPC selection
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("👥 NPC Relationships", _headerStyle);
+            GUILayout.Label("NPC Relationships", _headerStyle);
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("NPC ID:", _labelStyle, GUILayout.Width(60));
@@ -910,7 +734,7 @@ namespace OpenWood.Core.Cheats
             {
                 if (int.TryParse(_npcIdInput, out int npcId) && int.TryParse(_heartInput, out int hearts))
                 {
-                    SetNPCFriendship(npcId, hearts);
+                    NPCAPI.SetFriendship(npcId, hearts);
                 }
             }
             GUILayout.EndHorizontal();
@@ -920,59 +744,56 @@ namespace OpenWood.Core.Cheats
 
             // NPC quick buttons
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("❤️ Townsfolk Quick Set", _headerStyle);
+            GUILayout.Label("Townsfolk Quick Set", _headerStyle);
 
-            string[] npcs = { "Willow", "Dalton", "Dudley", "Laura", "Bubsy", "Ash", "Lilith", "Zana" };
+            var npcs = new[] { 
+                NPCAPI.NPC.Willow, NPCAPI.NPC.Dalton, NPCAPI.NPC.Dudley, NPCAPI.NPC.Laura,
+                NPCAPI.NPC.Bubsy, NPCAPI.NPC.Ash, NPCAPI.NPC.Lilith, NPCAPI.NPC.Zana 
+            };
+
             for (int row = 0; row < 2; row++)
             {
                 GUILayout.BeginHorizontal();
                 for (int col = 0; col < 4; col++)
                 {
-                    int npcId = row * 4 + col + 1;
-                    if (npcId <= npcs.Length)
+                    int idx = row * 4 + col;
+                    if (idx < npcs.Length)
                     {
-                        int level = GameScript.townsfolkLevel[npcId];
-                        if (GUILayout.Button($"{npcs[npcId-1]}\n♥ {level}", _smallButtonStyle, GUILayout.Height(40)))
+                        var npc = npcs[idx];
+                        int level = NPCAPI.GetFriendship(npc);
+                        if (GUILayout.Button($"{NPCAPI.GetName(npc)}\n[{level}]", _smallButtonStyle, GUILayout.Height(40)))
                         {
-                            SetNPCFriendship(npcId, 10);
+                            NPCAPI.SetFriendship(npc, NPCAPI.MaxFriendshipLevel);
                         }
                     }
                 }
                 GUILayout.EndHorizontal();
             }
 
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Click NPC to max hearts. More NPCs: IDs 9-15", _labelStyle);
-            GUILayout.EndHorizontal();
+            GUILayout.Label("Click NPC to max hearts.", _labelStyle);
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             // Bulk actions
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("⚡ Bulk Actions", _headerStyle);
+            GUILayout.Label("Bulk Actions", _headerStyle);
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Max All Friendships", _buttonStyle))
             {
-                for (int i = 1; i <= 20; i++)
-                    SetNPCFriendship(i, 10);
+                NPCAPI.MaxAllFriendships();
             }
             if (GUILayout.Button("Reset All Friendships", _buttonStyle))
             {
-                for (int i = 1; i <= 20; i++)
-                    SetNPCFriendship(i, 0);
+                NPCAPI.ResetAllFriendships();
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Max All Romance", _buttonStyle))
             {
-                for (int i = 1; i <= 20; i++)
-                {
-                    if (GameScript.townsfolkRomanceLvl != null && i < GameScript.townsfolkRomanceLvl.Length)
-                        GameScript.townsfolkRomanceLvl[i] = 10;
-                }
+                NPCAPI.MaxAllRomance();
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -986,51 +807,40 @@ namespace OpenWood.Core.Cheats
         {
             // Location info
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🗺️ Location Info", _headerStyle);
+            GUILayout.Label("Location Info", _headerStyle);
 
-            GUILayout.Label($"Indoor: {GameScript.isIndoor}", _labelStyle);
-            GUILayout.Label($"Player Position: {GameScript.playerPos}", _labelStyle);
-            GUILayout.Label($"Facing: {GameScript.facingDir}", _labelStyle);
+            GUILayout.Label($"Indoor: {WorldAPI.IsIndoors}", _labelStyle);
+            GUILayout.Label($"Player Position: {WorldAPI.PlayerPosition}", _labelStyle);
+            GUILayout.Label($"Facing: {WorldAPI.FacingDirection}", _labelStyle);
+            GUILayout.Label($"Build Mode: {WorldAPI.IsInBuildMode}", _labelStyle);
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             // Unlock features
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🔓 Unlocks", _headerStyle);
+            GUILayout.Label("Unlocks", _headerStyle);
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Unlock All Tools", _buttonStyle))
             {
-                UnlockAllTools();
+                WorldAPI.UnlockAllTools();
             }
             if (GUILayout.Button("Unlock All Recipes", _buttonStyle))
             {
-                UnlockAllRecipes();
+                WorldAPI.UnlockAllRecipes();
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Unlock All Museum Items", _buttonStyle))
+            if (GUILayout.Button("Unlock Museum", _buttonStyle))
             {
-                UnlockMuseum();
+                WorldAPI.UnlockMuseum();
             }
             if (GUILayout.Button("Discover All Items", _buttonStyle))
             {
-                DiscoverAllItems();
+                WorldAPI.DiscoverAllItems();
             }
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(5);
-
-            // Building
-            GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🏗️ Building", _headerStyle);
-
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"Build Mode: {GameScript.building}", _valueStyle);
-            GUILayout.Label($"Edit Mode: {GameScript.inEditMode}", _valueStyle);
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
 
@@ -1038,17 +848,17 @@ namespace OpenWood.Core.Cheats
 
             // Hobbies
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🎯 Hobbies", _headerStyle);
+            GUILayout.Label("Hobbies", _headerStyle);
 
             if (GUILayout.Button("Max All Hobby Levels", _buttonStyle))
             {
-                MaxAllHobbies();
+                PlayerAPI.MaxAllHobbies();
             }
 
             string[] hobbies = { "Woodcutting", "Mining", "Fishing", "Bug Catching", "Farming" };
-            for (int i = 0; i < Mathf.Min(hobbies.Length, GameScript.hobbyEXP.Length); i++)
+            for (int i = 0; i < hobbies.Length; i++)
             {
-                GUILayout.Label($"{hobbies[i]}: {GameScript.hobbyEXP[i]}", _labelStyle);
+                GUILayout.Label($"{hobbies[i]}: {PlayerAPI.GetHobbyExperience(i)}", _labelStyle);
             }
             GUILayout.EndVertical();
         }
@@ -1060,29 +870,29 @@ namespace OpenWood.Core.Cheats
         private void DrawTeleportTab()
         {
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("📍 Quick Teleport", _headerStyle);
+            GUILayout.Label("Quick Teleport", _headerStyle);
 
             GUILayout.Label("Common Locations:", _labelStyle);
 
             GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Town Center (0, 0)", _buttonStyle))
+            if (GUILayout.Button("Town Center", _buttonStyle))
             {
-                TeleportPlayer(0, 0);
+                PlayerAPI.Teleport(WorldAPI.Locations.TownCenter);
             }
-            if (GUILayout.Button("Farm Area (-3, -3)", _buttonStyle))
+            if (GUILayout.Button("Farm Area", _buttonStyle))
             {
-                TeleportPlayer(-3, -3);
+                PlayerAPI.Teleport(WorldAPI.Locations.FarmArea);
             }
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Forest Entrance", _buttonStyle))
             {
-                TeleportPlayer(5, 5);
+                PlayerAPI.Teleport(WorldAPI.Locations.ForestEntrance);
             }
             if (GUILayout.Button("Beach", _buttonStyle))
             {
-                TeleportPlayer(-5, 0);
+                PlayerAPI.Teleport(WorldAPI.Locations.Beach);
             }
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
@@ -1091,21 +901,21 @@ namespace OpenWood.Core.Cheats
 
             // Custom teleport
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🎯 Custom Teleport", _headerStyle);
+            GUILayout.Label("Custom Teleport", _headerStyle);
 
-            GUILayout.Label($"Current: ({GameScript.playerPos.x:F2}, {GameScript.playerPos.y:F2})", _valueStyle);
+            GUILayout.Label($"Current: ({PlayerAPI.Position.x:F2}, {PlayerAPI.Position.y:F2})", _valueStyle);
 
             GUILayout.BeginHorizontal();
             GUILayout.Label("X:", _labelStyle, GUILayout.Width(20));
-            string xInput = GUILayout.TextField(GameScript.playerPos.x.ToString("F1"), _textFieldStyle, GUILayout.Width(60));
+            _teleportX = GUILayout.TextField(_teleportX, _textFieldStyle, GUILayout.Width(60));
             GUILayout.Label("Y:", _labelStyle, GUILayout.Width(20));
-            string yInput = GUILayout.TextField(GameScript.playerPos.y.ToString("F1"), _textFieldStyle, GUILayout.Width(60));
+            _teleportY = GUILayout.TextField(_teleportY, _textFieldStyle, GUILayout.Width(60));
             
             if (GUILayout.Button("Teleport", _buttonStyle))
             {
-                if (float.TryParse(xInput, out float x) && float.TryParse(yInput, out float y))
+                if (float.TryParse(_teleportX, out float x) && float.TryParse(_teleportY, out float y))
                 {
-                    TeleportPlayer(x, y);
+                    PlayerAPI.Teleport(x, y);
                 }
             }
             GUILayout.EndHorizontal();
@@ -1119,275 +929,63 @@ namespace OpenWood.Core.Cheats
         private void DrawDebugTab()
         {
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🔧 Debug Options", _headerStyle);
+            GUILayout.Label("Debug Options", _headerStyle);
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"Menu Open: {GameScript.menuOpen}", _valueStyle);
-            GUILayout.Label($"Talking: {GameScript.talking}", _valueStyle);
-            GUILayout.Label($"Interacting: {GameScript.interacting}", _valueStyle);
+            GUILayout.Label($"Menu Open: {GameAPI.IsMenuOpen}", _valueStyle);
+            GUILayout.Label($"Talking: {GameAPI.IsTalking}", _valueStyle);
+            GUILayout.Label($"Interacting: {GameAPI.IsInteracting}", _valueStyle);
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label($"Fishing: {GameScript.fishing}", _valueStyle);
-            GUILayout.Label($"Building: {GameScript.building}", _valueStyle);
+            GUILayout.Label($"Fishing: {GameAPI.IsFishing}", _valueStyle);
+            GUILayout.Label($"Building: {GameAPI.IsBuilding}", _valueStyle);
+            GUILayout.Label($"Paused: {GameAPI.IsPaused}", _valueStyle);
             GUILayout.EndHorizontal();
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("🎮 Game State", _headerStyle);
+            GUILayout.Label("Game State", _headerStyle);
 
             if (GUILayout.Button("Force Close All Menus", _buttonStyle))
             {
-                GameScript.menuOpen = false;
-                GameScript.talking = false;
-                GameScript.interacting = false;
+                GameAPI.CloseAllMenus();
             }
 
             if (GUILayout.Button("Dump Game State to Log", _buttonStyle))
             {
-                DumpGameState();
+                GameAPI.DumpGameState();
             }
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("📊 Statistics", _headerStyle);
+            GUILayout.Label("Statistics", _headerStyle);
 
-            GUILayout.Label($"Days Played: {GameScript.daysPlayed}", _labelStyle);
-            GUILayout.Label($"Total Dewdrops Earned: {GameScript.dew}", _labelStyle);
+            GUILayout.Label($"Days Played: {GameAPI.DaysPlayed}", _labelStyle);
+            GUILayout.Label($"Total Dewdrops: {GameAPI.TotalMoney}", _labelStyle);
             GUILayout.EndVertical();
 
             GUILayout.Space(5);
 
             GUILayout.BeginVertical(_sectionStyle);
-            GUILayout.Label("ℹ️ About & Controls", _headerStyle);
-            GUILayout.Label("OpenWood Cheat Menu v1.0", _labelStyle);
+            GUILayout.Label("About & Controls", _headerStyle);
+            GUILayout.Label($"OpenWood v{GameAPI.OpenWoodVersion}", _labelStyle);
             GUILayout.Space(5);
-            GUILayout.Label("⌨️ Keyboard Shortcuts:", _valueStyle);
+            GUILayout.Label("Keyboard Shortcuts:", _valueStyle);
             GUILayout.Label("  F3 - Toggle this menu", _labelStyle);
-            GUILayout.Label("  Q / [ - Previous tab", _labelStyle);
-            GUILayout.Label("  E / ] - Next tab", _labelStyle);
-            GUILayout.Label("  ↑↓ - Scroll content", _labelStyle);
+            GUILayout.Label("  Q / E - Previous/Next tab", _labelStyle);
+            GUILayout.Label("  Arrow Keys - Scroll content", _labelStyle);
             GUILayout.Space(5);
-            GUILayout.Label("⚡ Quick Actions (per tab):", _valueStyle);
+            GUILayout.Label("Quick Actions (per tab):", _valueStyle);
             GUILayout.Label("  Player: 1=+1000$, 2=+10000$, 3=Reset EXP", _labelStyle);
-            GUILayout.Label("  Items: 1=10 Oak, 2=10 Copper Ore, 3=10 Copper Bar", _labelStyle);
+            GUILayout.Label("  Items: 1=10 Wood, 2=10 Stone, 3=10 Planks", _labelStyle);
             GUILayout.Label("  Time: 1=Next Day, 2=Toggle Rain", _labelStyle);
             GUILayout.Label("  NPCs: 1=Max All Friendships", _labelStyle);
             GUILayout.EndVertical();
-        }
-
-        #endregion
-
-        #region Cheat Methods
-
-        private void AddMoney(int amount)
-        {
-            try
-            {
-                if (_gameScript != null && _addDewdropsMethod != null)
-                {
-                    _addDewdropsMethod.Invoke(_gameScript, new object[] { amount });
-                }
-                else
-                {
-                    GameScript.dew += amount;
-                    GameScript.actualDew += amount;
-                }
-                Plugin.Log.LogInfo($"Added {amount} dewdrops");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to add money: {ex.Message}");
-            }
-        }
-
-        private void SetMoney(int amount)
-        {
-            GameScript.dew = amount;
-            GameScript.actualDew = amount;
-            Plugin.Log.LogInfo($"Set dewdrops to {amount}");
-        }
-
-        private void AddDayEXP(int amount)
-        {
-            GameScript.dayEXP = Mathf.Min(GameScript.dayEXP + amount, 100);
-            Plugin.Log.LogInfo($"Added {amount} day EXP");
-        }
-
-        private void AddItem(int itemId, int quantity = 1)
-        {
-            try
-            {
-                if (_gameScript != null && _addItemMethod != null)
-                {
-                    // AddItem takes (int id, int quantity)
-                    _addItemMethod.Invoke(_gameScript, new object[] { itemId, quantity });
-                    Plugin.Log.LogInfo($"Added {quantity}x item {itemId}");
-                }
-                else
-                {
-                    Plugin.Log.LogWarning("Could not add item - GameScript not found");
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to add item: {ex.Message}");
-            }
-        }
-
-        private void SetNPCFriendship(int npcId, int level)
-        {
-            try
-            {
-                if (npcId >= 0 && npcId < GameScript.townsfolkLevel.Length)
-                {
-                    GameScript.townsfolkLevel[npcId] = Mathf.Clamp(level, 0, 10);
-                    Plugin.Log.LogInfo($"Set NPC {npcId} friendship to {level}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to set NPC friendship: {ex.Message}");
-            }
-        }
-
-        private void AdvanceDay()
-        {
-            GameScript.daysPlayed++;
-            GameScript.day++;
-            if (GameScript.day > 7)
-            {
-                GameScript.day = 1;
-                GameScript.week++;
-                if (GameScript.week > 3)
-                {
-                    GameScript.week = 0;
-                    GameScript.season++;
-                    if (GameScript.season > 3)
-                    {
-                        GameScript.season = 0;
-                        GameScript.year++;
-                    }
-                }
-            }
-            Plugin.Log.LogInfo($"Advanced to day {GameScript.day}, season {GameScript.season}, year {GameScript.year}");
-        }
-
-        private void ToggleRain()
-        {
-            GameScript.raining = !GameScript.raining;
-            Plugin.Log.LogInfo($"Rain: {GameScript.raining}");
-        }
-
-        private void UnlockAllTools()
-        {
-            try
-            {
-                var toolUnlocked = typeof(GameScript).GetField("toolUnlocked", BindingFlags.Static | BindingFlags.Public);
-                if (toolUnlocked != null)
-                {
-                    var tools = toolUnlocked.GetValue(null) as int[];
-                    if (tools != null)
-                    {
-                        for (int i = 0; i < tools.Length; i++)
-                            tools[i] = 1;
-                        Plugin.Log.LogInfo("Unlocked all tools");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to unlock tools: {ex.Message}");
-            }
-        }
-
-        private void UnlockAllRecipes()
-        {
-            Plugin.Log.LogInfo("Unlock all recipes - not yet implemented");
-        }
-
-        private void UnlockMuseum()
-        {
-            Plugin.Log.LogInfo("Unlock museum - not yet implemented");
-        }
-
-        private void DiscoverAllItems()
-        {
-            try
-            {
-                for (int i = 0; i < GameScript.discoverLevel.Length; i++)
-                {
-                    GameScript.discoverLevel[i] = 1;
-                }
-                Plugin.Log.LogInfo("Discovered all items");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to discover items: {ex.Message}");
-            }
-        }
-
-        private void MaxAllHobbies()
-        {
-            try
-            {
-                for (int i = 0; i < GameScript.hobbyEXP.Length; i++)
-                {
-                    GameScript.hobbyEXP[i] = 999999;
-                }
-                Plugin.Log.LogInfo("Maxed all hobby levels");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to max hobbies: {ex.Message}");
-            }
-        }
-
-        private void TeleportPlayer(float x, float y)
-        {
-            try
-            {
-                GameScript.playerPos = new Vector2(x, y);
-                PlayerController.pos = new Vector2(x, y);
-                
-                if (_playerController != null)
-                {
-                    _playerController.transform.position = new Vector3(x, y, 0);
-                }
-                
-                Plugin.Log.LogInfo($"Teleported to ({x}, {y})");
-            }
-            catch (Exception ex)
-            {
-                Plugin.Log.LogError($"Failed to teleport: {ex.Message}");
-            }
-        }
-
-        private void DumpGameState()
-        {
-            Plugin.Log.LogInfo("=== GAME STATE DUMP ===");
-            Plugin.Log.LogInfo($"Day: {GameScript.day}, Week: {GameScript.week}, Season: {GameScript.season}, Year: {GameScript.year}");
-            Plugin.Log.LogInfo($"Dew: {GameScript.dew}, DayEXP: {GameScript.dayEXP}");
-            Plugin.Log.LogInfo($"Position: {GameScript.playerPos}");
-            Plugin.Log.LogInfo($"Raining: {GameScript.raining}");
-            Plugin.Log.LogInfo($"Indoor: {GameScript.isIndoor}");
-            Plugin.Log.LogInfo("======================");
-        }
-
-        private string GetSeasonName(int season)
-        {
-            switch (season)
-            {
-                case 0: return "Spring";
-                case 1: return "Summer";
-                case 2: return "Autumn";
-                case 3: return "Winter";
-                default: return "Unknown";
-            }
         }
 
         #endregion
