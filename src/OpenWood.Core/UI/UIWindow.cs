@@ -162,6 +162,16 @@ namespace OpenWood.Core.UI
             _contentArea.offsetMin = new Vector2(10, 10);
             _contentArea.offsetMax = new Vector2(-10, -50);
 
+            // Add vertical layout group to automatically arrange children
+            var contentLayout = content.AddComponent<VerticalLayoutGroup>();
+            contentLayout.spacing = 5;
+            contentLayout.padding = new RectOffset(5, 5, 5, 5);
+            contentLayout.childAlignment = TextAnchor.UpperCenter;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = false;
+
             // Add content size fitter for layout compatibility
             var layoutElement = content.AddComponent<LayoutElement>();
             layoutElement.flexibleWidth = 1;

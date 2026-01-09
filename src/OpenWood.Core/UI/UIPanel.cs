@@ -47,6 +47,28 @@ namespace OpenWood.Core.UI
             RectTransform = GameObject.AddComponent<RectTransform>();
             RectTransform.sizeDelta = new Vector2(width, height);
 
+            // Add layout element for use in parent layouts
+            var layoutElement = GameObject.AddComponent<LayoutElement>();
+            // Only set min/preferred if explicitly provided (> 0)
+            // Height of 0 means "auto-size" via ContentSizeFitter
+            if (width > 0)
+            {
+                layoutElement.minWidth = width;
+                layoutElement.preferredWidth = width;
+            }
+            else
+            {
+                layoutElement.flexibleWidth = 1;
+            }
+            
+            if (height > 0)
+            {
+                layoutElement.minHeight = height;
+                layoutElement.preferredHeight = height;
+            }
+            // Don't set minHeight or preferredHeight when height is 0
+            // This allows ContentSizeFitter to work properly
+
             _backgroundImage = GameObject.AddComponent<Image>();
             _backgroundImage.sprite = UISprites.GetPanelSprite();
             _backgroundImage.type = Image.Type.Sliced;

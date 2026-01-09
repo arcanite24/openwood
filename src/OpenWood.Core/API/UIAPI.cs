@@ -205,18 +205,20 @@ namespace OpenWood.Core.API
             go.transform.SetParent(parent, false);
 
             var rect = go.AddComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(0, 35); // Default height
+
+            var layoutElem = go.AddComponent<LayoutElement>();
+            layoutElem.minHeight = 35;
+            layoutElem.preferredHeight = 35;
+            layoutElem.flexibleWidth = 1;
 
             var layout = go.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = spacing;
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
+            layout.childForceExpandHeight = true;
             layout.childControlWidth = false;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true;
 
             return go;
         }
@@ -230,17 +232,18 @@ namespace OpenWood.Core.API
             go.transform.SetParent(parent, false);
 
             var rect = go.AddComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(0, 0);
+
+            var layoutElem = go.AddComponent<LayoutElement>();
+            layoutElem.flexibleWidth = 1;
+            layoutElem.flexibleHeight = 1;
 
             var layout = go.AddComponent<VerticalLayoutGroup>();
             layout.spacing = spacing;
             layout.childAlignment = TextAnchor.UpperCenter;
-            layout.childForceExpandWidth = false;
+            layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
-            layout.childControlWidth = false;
+            layout.childControlWidth = true;
             layout.childControlHeight = false;
 
             return go;

@@ -14,7 +14,10 @@ namespace OpenWood.Core.UI
         private readonly RectTransform _contentRect;
         private readonly Image _backgroundImage;
         private readonly Scrollbar _verticalScrollbar;
+        // Note: Horizontal scrollbar field reserved for future use
+        #pragma warning disable CS0169
         private readonly Scrollbar _horizontalScrollbar;
+        #pragma warning restore CS0169
 
         #endregion
 
@@ -77,14 +80,12 @@ namespace OpenWood.Core.UI
             RectTransform = GameObject.AddComponent<RectTransform>();
             RectTransform.sizeDelta = new Vector2(width, height);
 
-            // Add layout element
+            // Add layout element - use fixed size
             var layoutElement = GameObject.AddComponent<LayoutElement>();
-            layoutElement.minWidth = 100;
-            layoutElement.minHeight = 50;
+            layoutElement.minWidth = width;
+            layoutElement.minHeight = height;
             layoutElement.preferredWidth = width;
             layoutElement.preferredHeight = height;
-            layoutElement.flexibleWidth = 1;
-            layoutElement.flexibleHeight = 1;
 
             // Background
             _backgroundImage = GameObject.AddComponent<Image>();
@@ -92,11 +93,7 @@ namespace OpenWood.Core.UI
             _backgroundImage.type = Image.Type.Sliced;
             _backgroundImage.color = UIColors.Darken(UIColors.PanelBackground, 0.05f);
 
-            // Mask for clipping content
-            var mask = GameObject.AddComponent<Mask>();
-            mask.showMaskGraphic = true;
-
-            // Viewport
+            // Viewport - use RectMask2D instead of Mask (more reliable)
             var viewportObj = new GameObject("Viewport");
             viewportObj.transform.SetParent(GameObject.transform, false);
 
@@ -104,28 +101,26 @@ namespace OpenWood.Core.UI
             viewportRect.anchorMin = Vector2.zero;
             viewportRect.anchorMax = Vector2.one;
             viewportRect.offsetMin = new Vector2(5, 5);
-            viewportRect.offsetMax = new Vector2(-20, -5); // Leave room for scrollbar
+            viewportRect.offsetMax = new Vector2(-18, -5); // Leave room for scrollbar
 
-            var viewportImage = viewportObj.AddComponent<Image>();
-            viewportImage.color = Color.clear;
-
-            var viewportMask = viewportObj.AddComponent<Mask>();
-            viewportMask.showMaskGraphic = false;
+            // RectMask2D is better than Mask for scroll views
+            viewportObj.AddComponent<RectMask2D>();
 
             // Content
             var contentObj = new GameObject("Content");
             contentObj.transform.SetParent(viewportObj.transform, false);
 
             _contentRect = contentObj.AddComponent<RectTransform>();
+            // Anchor to top, stretch horizontally
             _contentRect.anchorMin = new Vector2(0, 1);
             _contentRect.anchorMax = new Vector2(1, 1);
-            _contentRect.pivot = new Vector2(0, 1);
-            _contentRect.offsetMin = Vector2.zero;
-            _contentRect.offsetMax = Vector2.zero;
+            _contentRect.pivot = new Vector2(0.5f, 1);
+            _contentRect.anchoredPosition = Vector2.zero;
+            _contentRect.sizeDelta = new Vector2(0, 0); // Width from anchors, height from fitter
 
-            // Add content size fitter for auto-sizing
+            // Content size fitter for auto-sizing height
             var contentSizeFitter = contentObj.AddComponent<ContentSizeFitter>();
-            contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
             contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             // Vertical scrollbar
@@ -197,9 +192,10 @@ namespace OpenWood.Core.UI
             layout.spacing = spacing;
             layout.padding = new RectOffset(padding, padding, padding, padding);
             layout.childControlWidth = true;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true;  // Must be true for ContentSizeFitter to work
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
+            layout.childAlignment = TextAnchor.UpperCenter;
             return this;
         }
 
